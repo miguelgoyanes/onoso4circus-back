@@ -7,7 +7,7 @@ import type { UsuarioRepository } from './usuario.repository';
 
 export interface JwtPayload {
   sub: string;
-  email: string;
+  username: string;
   rol: string;
 }
 
@@ -19,8 +19,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  public async login(email: string, password: string): Promise<{ accessToken: string }> {
-    const usuario = await this.repository.findByEmail(email);
+  public async login(username: string, password: string): Promise<{ accessToken: string }> {
+    const usuario = await this.repository.findByUsername(username);
     if (!usuario || !usuario.activo) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
@@ -30,7 +30,7 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    const payload: JwtPayload = { sub: usuario.id, email: usuario.email, rol: usuario.rol };
+    const payload: JwtPayload = { sub: usuario.id, username: usuario.username, rol: usuario.rol };
     return { accessToken: await this.jwtService.signAsync(payload) };
   }
 }

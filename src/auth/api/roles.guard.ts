@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import { Rol } from '../domain/usuario';
+import { ROLES_EFECTIVOS, Rol } from '../domain/usuario';
 import { ROLES_KEY } from './roles.decorator';
 import { AuthenticatedUser } from './authenticated-user';
 
@@ -17,6 +17,9 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const request = context.switchToHttp().getRequest<Request & { user: AuthenticatedUser }>();
-    return requiredRoles.includes(request.user.rol);
+    // El OWNER hereda todo lo que puede hacer un ADMIN (ver ROLES_EFECTIVOS en el dominio),
+    // así que no hace falta listarlo aparte en cada @Roles(...) del controller.
+    const rolesEfectivosDelUsuario = ROLES_EFECTIVOS[request.user.rol];
+    return requiredRoles.some((rolRequerido) => rolesEfectivosDelUsuario.includes(rolRequerido));
   }
 }

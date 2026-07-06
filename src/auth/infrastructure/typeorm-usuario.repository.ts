@@ -6,7 +6,7 @@ import { UsuarioRepository } from '../application/usuario.repository';
 import { UsuarioOrmEntity } from './orm/usuario.orm-entity';
 
 function toDomain(orm: UsuarioOrmEntity): Usuario {
-  return new Usuario(orm.id, orm.nombre, orm.email, orm.passwordHash, orm.rol, orm.activo);
+  return new Usuario(orm.id, orm.nombre, orm.username, orm.passwordHash, orm.rol, orm.activo);
 }
 
 @Injectable()
@@ -20,7 +20,7 @@ export class TypeOrmUsuarioRepository implements UsuarioRepository {
     await this.repo.save({
       id: usuario.id,
       nombre: usuario.nombre,
-      email: usuario.email,
+      username: usuario.username,
       passwordHash: usuario.passwordHash,
       rol: usuario.rol,
       activo: usuario.activo,
@@ -32,12 +32,22 @@ export class TypeOrmUsuarioRepository implements UsuarioRepository {
     return orm ? toDomain(orm) : null;
   }
 
-  public async findByEmail(email: string): Promise<Usuario | null> {
-    const orm = await this.repo.findOneBy({ email });
+  public async findByUsername(username: string): Promise<Usuario | null> {
+    const orm = await this.repo.findOneBy({ username });
     return orm ? toDomain(orm) : null;
+  }
+
+  public async findAll(): Promise<Usuario[]> {
+    const usuarios = await this.repo.find({ order: { nombre: 'ASC' } });
+    return usuarios.map(toDomain);
   }
 
   public async countActiveAdmins(): Promise<number> {
     return this.repo.countBy({ rol: Rol.ADMIN, activo: true });
+  }
+
+  public async existeOwner(): Promise<boolean> {
+    const count = await this.repo.countBy({ rol: Rol.OWNER });
+    return count > 0;
   }
 }

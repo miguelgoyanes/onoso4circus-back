@@ -10,7 +10,7 @@ export class UsuarioOrmEntity {
   nombre: string;
 
   @Column({ type: 'varchar', unique: true })
-  email: string;
+  username: string;
 
   @Column({ type: 'varchar', name: 'password_hash' })
   passwordHash: string;

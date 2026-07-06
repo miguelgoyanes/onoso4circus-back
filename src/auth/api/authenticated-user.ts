@@ -2,6 +2,6 @@ import { Rol } from '../domain/usuario';
 
 export interface AuthenticatedUser {
   userId: string;
-  email: string;
+  username: string;
   rol: Rol;
 }

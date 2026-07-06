@@ -1,9 +1,10 @@
 import Decimal from 'decimal.js';
 import { randomUUID } from 'crypto';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { TypeOrmTestModule } from '../test/typeorm-test.module';
 import { AccountingModule } from './accounting.module';
 import { AccountingService } from './application/accounting.service';
 import { Account, AccountType } from './domain/account';
@@ -18,24 +19,7 @@ describe('AccountingService (integración contra Postgres real)', () => {
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({ isGlobal: true }),
-        TypeOrmModule.forRootAsync({
-          imports: [ConfigModule],
-          inject: [ConfigService],
-          useFactory: (config: ConfigService) => ({
-            type: 'postgres',
-            host: config.get<string>('DB_HOST'),
-            port: parseInt(config.get<string>('DB_PORT', '5432'), 10),
-            username: config.get<string>('DB_USER'),
-            password: config.get<string>('DB_PASSWORD'),
-            database: config.get<string>('DB_NAME'),
-            autoLoadEntities: true,
-            synchronize: true,
-          }),
-        }),
-        AccountingModule,
-      ],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), TypeOrmTestModule, AccountingModule],
     }).compile();
 
     service = moduleRef.get(AccountingService);
