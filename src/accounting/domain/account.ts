@@ -12,5 +12,6 @@ export class Account {
     public readonly name: string,
     public readonly type: AccountType,
     public readonly code: string,
+    public readonly esCuentaDeDinero: boolean = false,
   ) {}
 }

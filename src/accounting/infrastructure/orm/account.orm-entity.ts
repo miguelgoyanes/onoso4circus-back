@@ -14,4 +14,7 @@ export class AccountOrmEntity {
 
   @Column({ type: 'varchar', unique: true })
   code: string;
+
+  @Column({ type: 'boolean', default: false })
+  esCuentaDeDinero: boolean;
 }
