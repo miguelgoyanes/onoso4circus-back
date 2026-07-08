@@ -7,6 +7,7 @@ import { PlazaService } from './application/plaza.service';
 import { FechaService } from './application/fecha.service';
 import { PaseService } from './application/pase.service';
 import { TipoActividad } from './domain/tipo-actividad';
+import { TipoPlaza } from './domain/tipo-plaza';
 
 describe('Plazas/Fechas/Pases (integración contra Postgres real)', () => {
   let plazaService: PlazaService;
@@ -49,6 +50,19 @@ describe('Plazas/Fechas/Pases (integración contra Postgres real)', () => {
     await expect(
       fechaService.crear('00000000-0000-0000-0000-000000000000', new Date(), TipoActividad.SHOW),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('crea una Plaza sin indicar tipo_plaza y usa CON_CIRCO por defecto', async () => {
+    const plaza = await plazaService.crear('Plaza sin tipo (test)', 'Bilbao');
+    expect(plaza.tipoPlaza).toBe(TipoPlaza.CON_CIRCO);
+  });
+
+  it('crea una Plaza SIN_CIRCO (actividad suelta, ej. un colegio) y persiste el tipo', async () => {
+    const plaza = await plazaService.crear('Show en colegio (test)', 'Valencia', TipoPlaza.SIN_CIRCO);
+    expect(plaza.tipoPlaza).toBe(TipoPlaza.SIN_CIRCO);
+
+    const relida = await plazaService.obtener(plaza.id);
+    expect(relida.tipoPlaza).toBe(TipoPlaza.SIN_CIRCO);
   });
 
   it('actualiza y luego elimina una Plaza', async () => {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Plaza } from '../domain/plaza';
+import { TipoPlaza } from '../domain/tipo-plaza';
 import { PLAZA_REPOSITORY } from './plaza.repository';
 import type { PlazaRepository } from './plaza.repository';
 
@@ -8,8 +9,12 @@ import type { PlazaRepository } from './plaza.repository';
 export class PlazaService {
   constructor(@Inject(PLAZA_REPOSITORY) private readonly repository: PlazaRepository) {}
 
-  public async crear(nombre: string, ubicacion: string): Promise<Plaza> {
-    const plaza = new Plaza(randomUUID(), nombre, ubicacion);
+  public async crear(
+    nombre: string,
+    ubicacion: string,
+    tipoPlaza: TipoPlaza = TipoPlaza.CON_CIRCO,
+  ): Promise<Plaza> {
+    const plaza = new Plaza(randomUUID(), nombre, ubicacion, tipoPlaza);
     await this.repository.save(plaza);
     return plaza;
   }
@@ -22,9 +27,14 @@ export class PlazaService {
     return this.buscarOFallar(id);
   }
 
-  public async actualizar(id: string, nombre: string, ubicacion: string): Promise<Plaza> {
+  public async actualizar(
+    id: string,
+    nombre: string,
+    ubicacion: string,
+    tipoPlaza?: TipoPlaza,
+  ): Promise<Plaza> {
     const plaza = await this.buscarOFallar(id);
-    const actualizada = plaza.conDatos(nombre, ubicacion);
+    const actualizada = plaza.conDatos(nombre, ubicacion, tipoPlaza ?? plaza.tipoPlaza);
     await this.repository.save(actualizada);
     return actualizada;
   }

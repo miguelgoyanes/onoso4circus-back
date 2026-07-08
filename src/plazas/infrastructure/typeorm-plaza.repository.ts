@@ -6,7 +6,7 @@ import { PlazaRepository } from '../application/plaza.repository';
 import { PlazaOrmEntity } from './orm/plaza.orm-entity';
 
 function toDomain(orm: PlazaOrmEntity): Plaza {
-  return new Plaza(orm.id, orm.nombre, orm.ubicacion);
+  return new Plaza(orm.id, orm.nombre, orm.ubicacion, orm.tipoPlaza);
 }
 
 @Injectable()
@@ -17,7 +17,12 @@ export class TypeOrmPlazaRepository implements PlazaRepository {
   ) {}
 
   public async save(plaza: Plaza): Promise<void> {
-    await this.repo.save({ id: plaza.id, nombre: plaza.nombre, ubicacion: plaza.ubicacion });
+    await this.repo.save({
+      id: plaza.id,
+      nombre: plaza.nombre,
+      ubicacion: plaza.ubicacion,
+      tipoPlaza: plaza.tipoPlaza,
+    });
   }
 
   public async findById(id: string): Promise<Plaza | null> {

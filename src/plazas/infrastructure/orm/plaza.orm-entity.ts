@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { TipoPlaza } from '../../domain/tipo-plaza';
 
 @Entity('plazas')
 export class PlazaOrmEntity {
@@ -10,4 +11,7 @@ export class PlazaOrmEntity {
 
   @Column({ type: 'varchar' })
   ubicacion: string;
+
+  @Column({ type: 'enum', enum: TipoPlaza, name: 'tipo_plaza', default: TipoPlaza.CON_CIRCO })
+  tipoPlaza: TipoPlaza;
 }

@@ -33,7 +33,7 @@ export class PlazasController {
 
   @Post()
   public async crear(@Body() dto: CrearPlazaDto): Promise<PlazaPublica> {
-    const plaza = await this.plazaService.crear(dto.nombre, dto.ubicacion);
+    const plaza = await this.plazaService.crear(dto.nombre, dto.ubicacion, dto.tipoPlaza);
     return toPlazaPublica(plaza);
   }
 
@@ -42,7 +42,7 @@ export class PlazasController {
     @Param('id') id: string,
     @Body() dto: CrearPlazaDto,
   ): Promise<PlazaPublica> {
-    const plaza = await this.plazaService.actualizar(id, dto.nombre, dto.ubicacion);
+    const plaza = await this.plazaService.actualizar(id, dto.nombre, dto.ubicacion, dto.tipoPlaza);
     return toPlazaPublica(plaza);
   }
 
