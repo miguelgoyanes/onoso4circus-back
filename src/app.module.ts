@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { PlazasModule } from './plazas/plazas.module';
 import { TesoreriaModule } from './tesoreria/tesoreria.module';
 import { GastosModule } from './gastos/gastos.module';
+import { PersonalModule } from './personal/personal.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { GastosModule } from './gastos/gastos.module';
     PlazasModule,
     TesoreriaModule,
     GastosModule,
+    PersonalModule,
   ],
   controllers: [AppController],
   providers: [AppService],
