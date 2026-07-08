@@ -1,108 +1,86 @@
 import Decimal from 'decimal.js';
-
-export enum TipoGasto {
-  PERSONAL = 'PERSONAL',
-  PLAZA = 'PLAZA',
-  GENERAL = 'GENERAL',
-}
+import { ConceptoPersonal } from './concepto-personal';
+import { TipoFiscal } from './tipo-fiscal';
 
 export enum EstadoPagoGasto {
   PAGADO = 'PAGADO',
   PENDIENTE_PAGO = 'PENDIENTE_PAGO',
 }
 
-export enum CategoriaGastoPlaza {
-  MONTAJE = 'MONTAJE',
-  ALQUILER_MATERIAL = 'ALQUILER_MATERIAL',
-  PERMISO_LICENCIA = 'PERMISO_LICENCIA',
-  OTRO = 'OTRO',
-}
-
-export enum CategoriaGastoGeneral {
-  GESTORIA = 'GESTORIA',
-  SEGURO_GENERAL = 'SEGURO_GENERAL',
-  MARKETING = 'MARKETING',
-  SUSCRIPCION = 'SUSCRIPCION',
-  OTRO = 'OTRO',
-}
-
-export enum ConceptoGastoDerivado {
-  DIETA = 'DIETA',
-  SEGURO = 'SEGURO',
-  OTRO = 'OTRO',
-}
-
-export interface GastoDerivado {
-  concepto: ConceptoGastoDerivado;
-  importe: Decimal;
+export class GastoPersonalDetalle {
+  constructor(
+    public readonly concepto: ConceptoPersonal,
+    public readonly importe: Decimal,
+  ) {}
 }
 
 export class Gasto {
   public readonly id: string;
-  public readonly tipo: TipoGasto;
+  public readonly categoriaId: string;
   public readonly fecha: Date;
   public readonly descripcion: string;
-  public readonly estadoPago: EstadoPagoGasto;
-  public readonly importeTotal: Decimal;
+  public readonly importe: Decimal;
   public readonly plazaId?: string;
   public readonly fechaId?: string;
   public readonly paseId?: string;
-
-  // tipo = PERSONAL
   public readonly empleadoId?: string;
-  public readonly asignacionId?: string;
-  public readonly importeSalario?: Decimal;
-  public readonly costeSs?: Decimal;
-  public readonly gastosDerivados: GastoDerivado[];
-
-  // tipo = PLAZA
-  public readonly categoriaPlaza?: CategoriaGastoPlaza;
-
-  // tipo = GENERAL
-  public readonly categoriaGeneral?: CategoriaGastoGeneral;
-
-  // tipo = PLAZA | GENERAL
-  public readonly importe?: Decimal;
+  public readonly estadoPago: EstadoPagoGasto;
+  public readonly cuentaPagoId?: string;
+  // Reparto fiscal: representa SIEMPRE un único split por gasto, sea el importe entero
+  // (categoría normal con aplica_iva) o específicamente la línea SALARIO (personal + AUTONOMO).
+  // Se fija al crear el gasto y no se vuelve a tocar — no existe edición posterior.
+  public readonly tipoFiscal?: TipoFiscal;
+  public readonly ivaPercent?: Decimal;
+  public readonly baseImponible?: Decimal;
+  public readonly importeIva?: Decimal;
+  public readonly detalle: GastoPersonalDetalle[];
+  // Todos los JournalEntry generados por este gasto (el de creación, y el de liquidación si
+  // pasó por pagarPendiente) — se necesitan para poder deshacerlos íntegramente al eliminar.
+  public readonly journalEntryIds: string[];
 
   constructor(params: {
     id: string;
-    tipo: TipoGasto;
+    categoriaId: string;
     fecha: Date;
     descripcion: string;
+    importe: Decimal;
     estadoPago: EstadoPagoGasto;
-    importeTotal: Decimal;
     plazaId?: string;
     fechaId?: string;
     paseId?: string;
     empleadoId?: string;
-    asignacionId?: string;
-    importeSalario?: Decimal;
-    costeSs?: Decimal;
-    gastosDerivados?: GastoDerivado[];
-    categoriaPlaza?: CategoriaGastoPlaza;
-    categoriaGeneral?: CategoriaGastoGeneral;
-    importe?: Decimal;
+    cuentaPagoId?: string;
+    tipoFiscal?: TipoFiscal;
+    ivaPercent?: Decimal;
+    baseImponible?: Decimal;
+    importeIva?: Decimal;
+    detalle?: GastoPersonalDetalle[];
+    journalEntryIds?: string[];
   }) {
     this.id = params.id;
-    this.tipo = params.tipo;
+    this.categoriaId = params.categoriaId;
     this.fecha = params.fecha;
     this.descripcion = params.descripcion;
+    this.importe = params.importe;
     this.estadoPago = params.estadoPago;
-    this.importeTotal = params.importeTotal;
     this.plazaId = params.plazaId;
     this.fechaId = params.fechaId;
     this.paseId = params.paseId;
     this.empleadoId = params.empleadoId;
-    this.asignacionId = params.asignacionId;
-    this.importeSalario = params.importeSalario;
-    this.costeSs = params.costeSs;
-    this.gastosDerivados = params.gastosDerivados ?? [];
-    this.categoriaPlaza = params.categoriaPlaza;
-    this.categoriaGeneral = params.categoriaGeneral;
-    this.importe = params.importe;
+    this.cuentaPagoId = params.cuentaPagoId;
+    this.tipoFiscal = params.tipoFiscal;
+    this.ivaPercent = params.ivaPercent;
+    this.baseImponible = params.baseImponible;
+    this.importeIva = params.importeIva;
+    this.detalle = params.detalle ?? [];
+    this.journalEntryIds = params.journalEntryIds ?? [];
   }
 
-  public marcarComoPagado(): Gasto {
-    return new Gasto({ ...this, estadoPago: EstadoPagoGasto.PAGADO });
+  public marcarComoPagado(nuevoJournalEntryId: string): Gasto {
+    return new Gasto({
+      ...this,
+      estadoPago: EstadoPagoGasto.PAGADO,
+      journalEntryIds: [...this.journalEntryIds, nuevoJournalEntryId],
+    });
   }
 }

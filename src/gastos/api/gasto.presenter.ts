@@ -1,58 +1,50 @@
-import {
-  CategoriaGastoGeneral,
-  CategoriaGastoPlaza,
-  ConceptoGastoDerivado,
-  EstadoPagoGasto,
-  Gasto,
-  TipoGasto,
-} from '../domain/gasto';
+import { ConceptoPersonal } from '../domain/concepto-personal';
+import { EstadoPagoGasto, Gasto } from '../domain/gasto';
+import { TipoFiscal } from '../domain/tipo-fiscal';
 
-export interface GastoDerivadoPublico {
-  concepto: ConceptoGastoDerivado;
+export interface GastoPersonalDetallePublico {
+  concepto: ConceptoPersonal;
   importe: string;
 }
 
 export interface GastoPublico {
   id: string;
-  tipo: TipoGasto;
+  categoriaId: string;
+  categoriaNombre: string;
   fecha: string;
   descripcion: string;
-  estadoPago: EstadoPagoGasto;
-  importeTotal: string;
+  importe: string;
   plazaId?: string;
   fechaId?: string;
   paseId?: string;
   empleadoId?: string;
-  asignacionId?: string;
-  importeSalario?: string;
-  costeSs?: string;
-  gastosDerivados: GastoDerivadoPublico[];
-  categoriaPlaza?: CategoriaGastoPlaza;
-  categoriaGeneral?: CategoriaGastoGeneral;
-  importe?: string;
+  estadoPago: EstadoPagoGasto;
+  cuentaPagoId?: string;
+  tipoFiscal?: TipoFiscal;
+  ivaPercent?: string;
+  baseImponible?: string;
+  importeIva?: string;
+  conceptos: GastoPersonalDetallePublico[];
 }
 
-export function toGastoPublico(gasto: Gasto): GastoPublico {
+export function toGastoPublico(gasto: Gasto, categoriaNombre: string): GastoPublico {
   return {
     id: gasto.id,
-    tipo: gasto.tipo,
+    categoriaId: gasto.categoriaId,
+    categoriaNombre,
     fecha: gasto.fecha.toISOString().slice(0, 10),
     descripcion: gasto.descripcion,
-    estadoPago: gasto.estadoPago,
-    importeTotal: gasto.importeTotal.toString(),
+    importe: gasto.importe.toString(),
     plazaId: gasto.plazaId,
     fechaId: gasto.fechaId,
     paseId: gasto.paseId,
     empleadoId: gasto.empleadoId,
-    asignacionId: gasto.asignacionId,
-    importeSalario: gasto.importeSalario?.toString(),
-    costeSs: gasto.costeSs?.toString(),
-    gastosDerivados: gasto.gastosDerivados.map((d) => ({
-      concepto: d.concepto,
-      importe: d.importe.toString(),
-    })),
-    categoriaPlaza: gasto.categoriaPlaza,
-    categoriaGeneral: gasto.categoriaGeneral,
-    importe: gasto.importe?.toString(),
+    estadoPago: gasto.estadoPago,
+    cuentaPagoId: gasto.cuentaPagoId,
+    tipoFiscal: gasto.tipoFiscal,
+    ivaPercent: gasto.ivaPercent?.toString(),
+    baseImponible: gasto.baseImponible?.toString(),
+    importeIva: gasto.importeIva?.toString(),
+    conceptos: gasto.detalle.map((d) => ({ concepto: d.concepto, importe: d.importe.toString() })),
   };
 }

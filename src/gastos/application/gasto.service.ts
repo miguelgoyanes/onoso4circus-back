@@ -1,20 +1,17 @@
 import { randomUUID } from 'crypto';
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
-import {
-  CategoriaGastoGeneral,
-  CategoriaGastoPlaza,
-  ConceptoGastoDerivado,
-  EstadoPagoGasto,
-  Gasto,
-  GastoDerivado,
-  TipoGasto,
-} from '../domain/gasto';
+import { EstadoPagoGasto, Gasto, GastoPersonalDetalle } from '../domain/gasto';
+import { ConceptoPersonal } from '../domain/concepto-personal';
+import { TipoFiscal } from '../domain/tipo-fiscal';
 import { GASTO_REPOSITORY, GastoFilter } from './gasto.repository';
 import type { GastoRepository } from './gasto.repository';
+import { CategoriaGastoService } from './categoria-gasto.service';
 import { PlazaService } from '../../plazas/application/plaza.service';
 import { FechaService } from '../../plazas/application/fecha.service';
 import { PaseService } from '../../plazas/application/pase.service';
+import { EmpleadoService } from '../../personal/application/empleado.service';
+import { RegimenEmpleado } from '../../personal/domain/regimen-empleado';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { JournalEntry } from '../../accounting/domain/journal-entry';
 import { JournalLine, JournalLineDimensions } from '../../accounting/domain/journal-line';
@@ -23,12 +20,19 @@ const CUENTA_PERSONAL_CON_PLAZA = '640001';
 const CUENTA_PERSONAL_SIN_PLAZA = '641001';
 const CUENTA_SEGURIDAD_SOCIAL = '642001';
 const CUENTA_GASTOS_DERIVADOS_PERSONAL = '643001';
-const CUENTA_GASTO_PLAZA = '620001';
-const CUENTA_GASTO_GENERAL = '629001';
+const CUENTA_IVA_SOPORTADO = '472001';
 const CUENTA_PROVEEDORES = '400001';
 
+export interface ConceptoPersonalInput {
+  concepto: ConceptoPersonal;
+  importe?: number;
+  tipoFiscal?: TipoFiscal;
+  ivaPercent?: number;
+  baseImponible?: number;
+}
+
 export interface CrearGastoParams {
-  tipo: TipoGasto;
+  categoriaId: string;
   fecha: Date;
   descripcion: string;
   estadoPago: EstadoPagoGasto;
@@ -36,27 +40,32 @@ export interface CrearGastoParams {
   plazaId?: string;
   fechaId?: string;
   paseId?: string;
-  // tipo = PERSONAL
   empleadoId?: string;
-  asignacionId?: string;
-  importeSalario?: number;
-  costeSs?: number;
-  gastosDerivados?: { concepto: ConceptoGastoDerivado; importe: number }[];
-  // tipo = PLAZA
-  categoriaPlaza?: CategoriaGastoPlaza;
-  // tipo = GENERAL
-  categoriaGeneral?: CategoriaGastoGeneral;
-  // tipo = PLAZA | GENERAL
+  // categoría normal (!categoria.esPagoPersonal)
   importe?: number;
+  tipoFiscal?: TipoFiscal;
+  ivaPercent?: number;
+  baseImponible?: number;
+  // categoría personal (categoria.esPagoPersonal)
+  conceptos?: ConceptoPersonalInput[];
+}
+
+interface RepartoIva {
+  baseImponible: Decimal;
+  ivaPercent: Decimal;
+  importeIva: Decimal;
+  importeTotal: Decimal;
 }
 
 @Injectable()
 export class GastoService {
   constructor(
     @Inject(GASTO_REPOSITORY) private readonly repository: GastoRepository,
+    private readonly categoriaGastoService: CategoriaGastoService,
     private readonly plazaService: PlazaService,
     private readonly fechaService: FechaService,
     private readonly paseService: PaseService,
+    private readonly empleadoService: EmpleadoService,
     private readonly accountingService: AccountingService,
   ) {}
 
@@ -65,110 +74,131 @@ export class GastoService {
     if (params.fechaId) await this.fechaService.obtener(params.fechaId);
     if (params.paseId) await this.paseService.obtener(params.paseId);
 
+    const categoria = await this.categoriaGastoService.obtener(params.categoriaId);
+
+    if (categoria.requiereEmpleado && !params.empleadoId) {
+      throw new BadRequestException('empleadoId es obligatorio para esta categoría');
+    }
+    const empleado = params.empleadoId ? await this.empleadoService.obtener(params.empleadoId) : undefined;
+
     if (params.estadoPago === EstadoPagoGasto.PAGADO && !params.cuentaPagoId) {
       throw new BadRequestException('cuentaPagoId es obligatorio cuando estadoPago = PAGADO');
     }
 
-    const dimensionesBase: JournalLineDimensions = {
+    const dimensiones: JournalLineDimensions = {
       plazaId: params.plazaId,
       fechaId: params.fechaId,
       paseId: params.paseId,
+      empleadoId: params.empleadoId,
     };
 
     const lines: JournalLine[] = [];
     let total = new Decimal(0);
+    let tipoFiscalGasto: TipoFiscal | undefined;
+    let ivaPercentGasto: Decimal | undefined;
+    let baseImponibleGasto: Decimal | undefined;
+    let importeIvaGasto: Decimal | undefined;
+    const detalle: GastoPersonalDetalle[] = [];
 
-    let importeSalario: Decimal | undefined;
-    let costeSs: Decimal | undefined;
-    const gastosDerivados: GastoDerivado[] = [];
-    let importeGenerico: Decimal | undefined;
+    if (categoria.esPagoPersonal) {
+      if (!empleado) {
+        throw new BadRequestException('empleadoId es obligatorio para esta categoría');
+      }
+      if (!params.conceptos?.length) {
+        throw new BadRequestException('conceptos es obligatorio para esta categoría');
+      }
 
-    switch (params.tipo) {
-      case TipoGasto.PERSONAL: {
-        if (!params.empleadoId) {
-          throw new BadRequestException('empleadoId es obligatorio para tipo=PERSONAL');
-        }
-        if (params.importeSalario == null) {
-          throw new BadRequestException('importeSalario es obligatorio para tipo=PERSONAL');
-        }
-        const dimensionesPersonal: JournalLineDimensions = {
-          ...dimensionesBase,
-          empleadoId: params.empleadoId,
-        };
+      for (const c of params.conceptos) {
+        if (c.concepto === ConceptoPersonal.SALARIO) {
+          const cuentaSalarioCode = params.plazaId ? CUENTA_PERSONAL_CON_PLAZA : CUENTA_PERSONAL_SIN_PLAZA;
+          const cuentaSalario = await this.accountingService.obtenerCuentaPorCodigo(cuentaSalarioCode);
 
-        const cuentaSalarioCode = params.plazaId ? CUENTA_PERSONAL_CON_PLAZA : CUENTA_PERSONAL_SIN_PLAZA;
-        const cuentaSalario = await this.accountingService.obtenerCuentaPorCodigo(cuentaSalarioCode);
-        importeSalario = new Decimal(params.importeSalario);
-        lines.push(
-          new JournalLine({ account: cuentaSalario, debit: importeSalario, dimensions: dimensionesPersonal }),
-        );
-        total = total.plus(importeSalario);
-
-        if (params.costeSs != null) {
-          costeSs = new Decimal(params.costeSs);
-          const cuentaSs = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_SEGURIDAD_SOCIAL);
-          lines.push(new JournalLine({ account: cuentaSs, debit: costeSs, dimensions: dimensionesPersonal }));
-          total = total.plus(costeSs);
-        }
-
-        if (params.gastosDerivados?.length) {
-          const cuentaDerivados = await this.accountingService.obtenerCuentaPorCodigo(
-            CUENTA_GASTOS_DERIVADOS_PERSONAL,
-          );
-          for (const derivado of params.gastosDerivados) {
-            const importeDerivado = new Decimal(derivado.importe);
-            lines.push(
-              new JournalLine({
-                account: cuentaDerivados,
-                debit: importeDerivado,
-                dimensions: { ...dimensionesPersonal, categoryTag: derivado.concepto },
-              }),
-            );
-            total = total.plus(importeDerivado);
-            gastosDerivados.push({ concepto: derivado.concepto, importe: importeDerivado });
+          if (empleado.regimen === RegimenEmpleado.AUTONOMO) {
+            const tipoFiscalSalario = c.tipoFiscal ?? TipoFiscal.B;
+            if (tipoFiscalSalario === TipoFiscal.A) {
+              const reparto = this.calcularReparto(c.baseImponible, c.ivaPercent);
+              lines.push(new JournalLine({ account: cuentaSalario, debit: reparto.baseImponible, dimensions: dimensiones }));
+              const cuentaIva = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_IVA_SOPORTADO);
+              lines.push(new JournalLine({ account: cuentaIva, debit: reparto.importeIva, dimensions: dimensiones }));
+              total = total.plus(reparto.importeTotal);
+              tipoFiscalGasto = TipoFiscal.A;
+              ivaPercentGasto = reparto.ivaPercent;
+              baseImponibleGasto = reparto.baseImponible;
+              importeIvaGasto = reparto.importeIva;
+              detalle.push(new GastoPersonalDetalle(ConceptoPersonal.SALARIO, reparto.importeTotal));
+            } else {
+              const importeConcepto = this.requerirImporte(c.importe, 'SALARIO');
+              lines.push(new JournalLine({ account: cuentaSalario, debit: importeConcepto, dimensions: dimensiones }));
+              total = total.plus(importeConcepto);
+              tipoFiscalGasto = TipoFiscal.B;
+              ivaPercentGasto = new Decimal(0);
+              baseImponibleGasto = importeConcepto;
+              importeIvaGasto = new Decimal(0);
+              detalle.push(new GastoPersonalDetalle(ConceptoPersonal.SALARIO, importeConcepto));
+            }
+          } else {
+            if (c.tipoFiscal) {
+              throw new BadRequestException('Un empleado CUENTA_AJENA nunca lleva IVA en el concepto SALARIO');
+            }
+            const importeConcepto = this.requerirImporte(c.importe, 'SALARIO');
+            lines.push(new JournalLine({ account: cuentaSalario, debit: importeConcepto, dimensions: dimensiones }));
+            total = total.plus(importeConcepto);
+            detalle.push(new GastoPersonalDetalle(ConceptoPersonal.SALARIO, importeConcepto));
           }
+        } else if (c.concepto === ConceptoPersonal.SEGURIDAD_SOCIAL) {
+          if (empleado.regimen !== RegimenEmpleado.CUENTA_AJENA) {
+            throw new BadRequestException('SEGURIDAD_SOCIAL solo aplica a empleados CUENTA_AJENA');
+          }
+          const importeConcepto = this.requerirImporte(c.importe, 'SEGURIDAD_SOCIAL');
+          const cuentaSs = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_SEGURIDAD_SOCIAL);
+          lines.push(new JournalLine({ account: cuentaSs, debit: importeConcepto, dimensions: dimensiones }));
+          total = total.plus(importeConcepto);
+          detalle.push(new GastoPersonalDetalle(ConceptoPersonal.SEGURIDAD_SOCIAL, importeConcepto));
+        } else {
+          const importeConcepto = this.requerirImporte(c.importe, c.concepto);
+          const cuentaDerivados = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_GASTOS_DERIVADOS_PERSONAL);
+          lines.push(
+            new JournalLine({
+              account: cuentaDerivados,
+              debit: importeConcepto,
+              dimensions: dimensiones,
+            }),
+          );
+          total = total.plus(importeConcepto);
+          detalle.push(new GastoPersonalDetalle(c.concepto, importeConcepto));
         }
-        break;
       }
-
-      case TipoGasto.PLAZA: {
-        if (!params.categoriaPlaza) {
-          throw new BadRequestException('categoriaPlaza es obligatorio para tipo=PLAZA');
-        }
-        if (params.importe == null) {
-          throw new BadRequestException('importe es obligatorio para tipo=PLAZA');
-        }
-        const cuenta = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_GASTO_PLAZA);
-        importeGenerico = new Decimal(params.importe);
-        lines.push(
-          new JournalLine({
-            account: cuenta,
-            debit: importeGenerico,
-            dimensions: { ...dimensionesBase, categoryTag: params.categoriaPlaza },
-          }),
-        );
-        total = importeGenerico;
-        break;
+    } else {
+      if (!categoria.cuentaContableId) {
+        throw new ConflictException('La categoría no tiene cuenta contable asignada');
       }
+      const cuenta = await this.accountingService.obtenerCuentaPorId(categoria.cuentaContableId);
 
-      case TipoGasto.GENERAL: {
-        if (!params.categoriaGeneral) {
-          throw new BadRequestException('categoriaGeneral es obligatorio para tipo=GENERAL');
+      if (categoria.aplicaIva) {
+        const tipoFiscalElegido = params.tipoFiscal ?? TipoFiscal.B;
+        if (tipoFiscalElegido === TipoFiscal.A) {
+          const reparto = this.calcularReparto(params.baseImponible, params.ivaPercent);
+          lines.push(new JournalLine({ account: cuenta, debit: reparto.baseImponible, dimensions: dimensiones }));
+          const cuentaIva = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_IVA_SOPORTADO);
+          lines.push(new JournalLine({ account: cuentaIva, debit: reparto.importeIva, dimensions: dimensiones }));
+          total = reparto.importeTotal;
+          tipoFiscalGasto = TipoFiscal.A;
+          ivaPercentGasto = reparto.ivaPercent;
+          baseImponibleGasto = reparto.baseImponible;
+          importeIvaGasto = reparto.importeIva;
+        } else {
+          const importeGenerico = this.requerirImporte(params.importe, categoria.nombre);
+          lines.push(new JournalLine({ account: cuenta, debit: importeGenerico, dimensions: dimensiones }));
+          total = importeGenerico;
+          tipoFiscalGasto = TipoFiscal.B;
+          ivaPercentGasto = new Decimal(0);
+          baseImponibleGasto = importeGenerico;
+          importeIvaGasto = new Decimal(0);
         }
-        if (params.importe == null) {
-          throw new BadRequestException('importe es obligatorio para tipo=GENERAL');
-        }
-        const cuenta = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_GASTO_GENERAL);
-        importeGenerico = new Decimal(params.importe);
-        lines.push(
-          new JournalLine({
-            account: cuenta,
-            debit: importeGenerico,
-            dimensions: { ...dimensionesBase, categoryTag: params.categoriaGeneral },
-          }),
-        );
+      } else {
+        const importeGenerico = this.requerirImporte(params.importe, categoria.nombre);
+        lines.push(new JournalLine({ account: cuenta, debit: importeGenerico, dimensions: dimensiones }));
         total = importeGenerico;
-        break;
       }
     }
 
@@ -176,42 +206,36 @@ export class GastoService {
       params.estadoPago === EstadoPagoGasto.PAGADO
         ? await this.accountingService.obtenerCuentaPorId(params.cuentaPagoId!)
         : await this.accountingService.obtenerCuentaPorCodigo(CUENTA_PROVEEDORES);
+    lines.push(new JournalLine({ account: cuentaCredito, credit: total, dimensions: dimensiones }));
 
-    lines.push(
-      new JournalLine({
-        account: cuentaCredito,
-        credit: total,
-        dimensions: { ...dimensionesBase, empleadoId: params.empleadoId },
-      }),
-    );
-
+    const journalEntryId = randomUUID();
     await this.accountingService.post(
       new JournalEntry({
-        id: randomUUID(),
+        id: journalEntryId,
         date: params.fecha,
-        description: `Gasto (${params.tipo}): ${params.descripcion}`,
+        description: `Gasto (${categoria.nombre}): ${params.descripcion}`,
         lines,
       }),
     );
 
     const gasto = new Gasto({
       id: randomUUID(),
-      tipo: params.tipo,
+      categoriaId: params.categoriaId,
       fecha: params.fecha,
       descripcion: params.descripcion,
+      importe: total,
       estadoPago: params.estadoPago,
-      importeTotal: total,
       plazaId: params.plazaId,
       fechaId: params.fechaId,
       paseId: params.paseId,
       empleadoId: params.empleadoId,
-      asignacionId: params.asignacionId,
-      importeSalario,
-      costeSs,
-      gastosDerivados,
-      categoriaPlaza: params.categoriaPlaza,
-      categoriaGeneral: params.categoriaGeneral,
-      importe: importeGenerico,
+      cuentaPagoId: params.cuentaPagoId,
+      tipoFiscal: tipoFiscalGasto,
+      ivaPercent: ivaPercentGasto,
+      baseImponible: baseImponibleGasto,
+      importeIva: importeIvaGasto,
+      detalle,
+      journalEntryIds: [journalEntryId],
     });
     await this.repository.save(gasto);
     return gasto;
@@ -232,21 +256,30 @@ export class GastoService {
       empleadoId: gasto.empleadoId,
     };
 
+    const journalEntryId = randomUUID();
     await this.accountingService.post(
       new JournalEntry({
-        id: randomUUID(),
+        id: journalEntryId,
         date: new Date(),
         description: `Pago de gasto pendiente: ${gasto.descripcion}`,
         lines: [
-          new JournalLine({ account: cuentaProveedores, debit: gasto.importeTotal, dimensions: dimensiones }),
-          new JournalLine({ account: cuentaPago, credit: gasto.importeTotal, dimensions: dimensiones }),
+          new JournalLine({ account: cuentaProveedores, debit: gasto.importe, dimensions: dimensiones }),
+          new JournalLine({ account: cuentaPago, credit: gasto.importe, dimensions: dimensiones }),
         ],
       }),
     );
 
-    const pagado = gasto.marcarComoPagado();
+    const pagado = gasto.marcarComoPagado(journalEntryId);
     await this.repository.save(pagado);
     return pagado;
+  }
+
+  public async eliminar(id: string): Promise<void> {
+    const gasto = await this.buscarOFallar(id);
+    for (const journalEntryId of gasto.journalEntryIds) {
+      await this.accountingService.eliminarAsiento(journalEntryId);
+    }
+    await this.repository.delete(id);
   }
 
   public async listar(filter?: GastoFilter): Promise<Gasto[]> {
@@ -255,6 +288,24 @@ export class GastoService {
 
   public async obtener(id: string): Promise<Gasto> {
     return this.buscarOFallar(id);
+  }
+
+  private calcularReparto(baseImponibleInput?: number, ivaPercentInput?: number): RepartoIva {
+    if (baseImponibleInput == null || ivaPercentInput == null) {
+      throw new BadRequestException('baseImponible e ivaPercent son obligatorios cuando tipoFiscal = A');
+    }
+    const baseImponible = new Decimal(baseImponibleInput);
+    const ivaPercent = new Decimal(ivaPercentInput);
+    const importeIva = baseImponible.times(ivaPercent).dividedBy(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    const importeTotal = baseImponible.plus(importeIva);
+    return { baseImponible, ivaPercent, importeIva, importeTotal };
+  }
+
+  private requerirImporte(importe: number | undefined, etiqueta: string): Decimal {
+    if (importe == null) {
+      throw new BadRequestException(`importe es obligatorio para ${etiqueta}`);
+    }
+    return new Decimal(importe);
   }
 
   private async buscarOFallar(id: string): Promise<Gasto> {

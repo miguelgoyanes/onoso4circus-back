@@ -8,22 +8,22 @@ import { GastoOrmEntity } from './orm/gasto.orm-entity';
 function toDomain(orm: GastoOrmEntity): Gasto {
   return new Gasto({
     id: orm.id,
-    tipo: orm.tipo,
+    categoriaId: orm.categoriaId,
     fecha: orm.fecha,
     descripcion: orm.descripcion,
+    importe: orm.importe,
     estadoPago: orm.estadoPago,
-    importeTotal: orm.importeTotal,
     plazaId: orm.plazaId ?? undefined,
     fechaId: orm.fechaId ?? undefined,
     paseId: orm.paseId ?? undefined,
     empleadoId: orm.empleadoId ?? undefined,
-    asignacionId: orm.asignacionId ?? undefined,
-    importeSalario: orm.importeSalario ?? undefined,
-    costeSs: orm.costeSs ?? undefined,
-    gastosDerivados: orm.gastosDerivados,
-    categoriaPlaza: orm.categoriaPlaza ?? undefined,
-    categoriaGeneral: orm.categoriaGeneral ?? undefined,
-    importe: orm.importe ?? undefined,
+    cuentaPagoId: orm.cuentaPagoId ?? undefined,
+    tipoFiscal: orm.tipoFiscal ?? undefined,
+    ivaPercent: orm.ivaPercent ?? undefined,
+    baseImponible: orm.baseImponible ?? undefined,
+    importeIva: orm.importeIva ?? undefined,
+    detalle: orm.detalle,
+    journalEntryIds: orm.journalEntryIds,
   });
 }
 
@@ -37,22 +37,22 @@ export class TypeOrmGastoRepository implements GastoRepository {
   public async save(gasto: Gasto): Promise<void> {
     await this.repo.save({
       id: gasto.id,
-      tipo: gasto.tipo,
+      categoriaId: gasto.categoriaId,
       fecha: gasto.fecha,
       descripcion: gasto.descripcion,
+      importe: gasto.importe,
       estadoPago: gasto.estadoPago,
-      importeTotal: gasto.importeTotal,
       plazaId: gasto.plazaId ?? null,
       fechaId: gasto.fechaId ?? null,
       paseId: gasto.paseId ?? null,
       empleadoId: gasto.empleadoId ?? null,
-      asignacionId: gasto.asignacionId ?? null,
-      importeSalario: gasto.importeSalario ?? null,
-      costeSs: gasto.costeSs ?? null,
-      gastosDerivados: gasto.gastosDerivados,
-      categoriaPlaza: gasto.categoriaPlaza ?? null,
-      categoriaGeneral: gasto.categoriaGeneral ?? null,
-      importe: gasto.importe ?? null,
+      cuentaPagoId: gasto.cuentaPagoId ?? null,
+      tipoFiscal: gasto.tipoFiscal ?? null,
+      ivaPercent: gasto.ivaPercent ?? null,
+      baseImponible: gasto.baseImponible ?? null,
+      importeIva: gasto.importeIva ?? null,
+      detalle: gasto.detalle,
+      journalEntryIds: gasto.journalEntryIds,
     });
   }
 
@@ -65,11 +65,20 @@ export class TypeOrmGastoRepository implements GastoRepository {
     const gastos = await this.repo.find({
       where: {
         ...(filter?.plazaId ? { plazaId: filter.plazaId } : {}),
-        ...(filter?.tipo ? { tipo: filter.tipo } : {}),
+        ...(filter?.categoriaId ? { categoriaId: filter.categoriaId } : {}),
         ...(filter?.estadoPago ? { estadoPago: filter.estadoPago } : {}),
       },
       order: { fecha: 'DESC' },
     });
     return gastos.map(toDomain);
+  }
+
+  public async existeConCategoria(categoriaId: string): Promise<boolean> {
+    const count = await this.repo.count({ where: { categoriaId } });
+    return count > 0;
+  }
+
+  public async delete(id: string): Promise<void> {
+    await this.repo.delete({ id });
   }
 }

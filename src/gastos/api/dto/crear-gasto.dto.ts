@@ -12,26 +12,36 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import {
-  CategoriaGastoGeneral,
-  CategoriaGastoPlaza,
-  ConceptoGastoDerivado,
-  EstadoPagoGasto,
-  TipoGasto,
-} from '../../domain/gasto';
+import { ConceptoPersonal } from '../../domain/concepto-personal';
+import { EstadoPagoGasto } from '../../domain/gasto';
+import { TipoFiscal } from '../../domain/tipo-fiscal';
 
-class GastoDerivadoDto {
-  @IsEnum(ConceptoGastoDerivado)
-  concepto: ConceptoGastoDerivado;
+class ConceptoPersonalDto {
+  @IsEnum(ConceptoPersonal)
+  concepto: ConceptoPersonal;
 
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
-  importe: number;
+  importe?: number;
+
+  @IsOptional()
+  @IsEnum(TipoFiscal)
+  tipoFiscal?: TipoFiscal;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  ivaPercent?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  baseImponible?: number;
 }
 
 export class CrearGastoDto {
-  @IsEnum(TipoGasto)
-  tipo: TipoGasto;
+  @IsUUID()
+  categoriaId: string;
 
   @IsDateString()
   fecha: string;
@@ -59,45 +69,33 @@ export class CrearGastoDto {
   @IsUUID()
   paseId?: string;
 
-  // tipo = PERSONAL
-  @ValidateIf((o: CrearGastoDto) => o.tipo === TipoGasto.PERSONAL)
-  @IsString()
-  @MinLength(1)
+  @IsOptional()
+  @IsUUID()
   empleadoId?: string;
 
+  // categoría normal (!categoria.esPagoPersonal)
   @IsOptional()
-  @IsString()
-  asignacionId?: string;
-
-  @ValidateIf((o: CrearGastoDto) => o.tipo === TipoGasto.PERSONAL)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
-  importeSalario?: number;
-
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
-  costeSs?: number;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => GastoDerivadoDto)
-  gastosDerivados?: GastoDerivadoDto[];
-
-  // tipo = PLAZA
-  @ValidateIf((o: CrearGastoDto) => o.tipo === TipoGasto.PLAZA)
-  @IsEnum(CategoriaGastoPlaza)
-  categoriaPlaza?: CategoriaGastoPlaza;
-
-  // tipo = GENERAL
-  @ValidateIf((o: CrearGastoDto) => o.tipo === TipoGasto.GENERAL)
-  @IsEnum(CategoriaGastoGeneral)
-  categoriaGeneral?: CategoriaGastoGeneral;
-
-  // tipo = PLAZA | GENERAL
-  @ValidateIf((o: CrearGastoDto) => o.tipo === TipoGasto.PLAZA || o.tipo === TipoGasto.GENERAL)
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   importe?: number;
+
+  @IsOptional()
+  @IsEnum(TipoFiscal)
+  tipoFiscal?: TipoFiscal;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  ivaPercent?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  baseImponible?: number;
+
+  // categoría personal (categoria.esPagoPersonal)
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConceptoPersonalDto)
+  conceptos?: ConceptoPersonalDto[];
 }

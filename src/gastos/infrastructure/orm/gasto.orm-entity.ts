@@ -1,27 +1,28 @@
 import Decimal from 'decimal.js';
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
-import {
-  CategoriaGastoGeneral,
-  CategoriaGastoPlaza,
-  EstadoPagoGasto,
-  GastoDerivado,
-  TipoGasto,
-} from '../../domain/gasto';
+import { EstadoPagoGasto, GastoPersonalDetalle } from '../../domain/gasto';
+import { TipoFiscal } from '../../domain/tipo-fiscal';
+import { CategoriaGastoOrmEntity } from './categoria-gasto.orm-entity';
 import { PlazaOrmEntity } from '../../../plazas/infrastructure/orm/plaza.orm-entity';
 import { FechaOrmEntity } from '../../../plazas/infrastructure/orm/fecha.orm-entity';
 import { PaseOrmEntity } from '../../../plazas/infrastructure/orm/pase.orm-entity';
 import { decimalTransformer } from '../../../accounting/infrastructure/orm/decimal.transformer';
 import { decimalNullableTransformer } from './decimal-nullable.transformer';
 import { dateOnlyTransformer } from './date-only.transformer';
-import { gastosDerivadosTransformer } from './gastos-derivados.transformer';
+import { gastoDetalleTransformer } from './gasto-detalle.transformer';
+import { stringArrayTransformer } from './string-array.transformer';
 
 @Entity('gastos')
 export class GastoOrmEntity {
   @PrimaryColumn({ type: 'varchar' })
   id: string;
 
-  @Column({ type: 'enum', enum: TipoGasto })
-  tipo: TipoGasto;
+  @ManyToOne(() => CategoriaGastoOrmEntity)
+  @JoinColumn({ name: 'categoria_id' })
+  categoria: CategoriaGastoOrmEntity;
+
+  @Column({ type: 'varchar', name: 'categoria_id' })
+  categoriaId: string;
 
   @Column({ type: 'date', transformer: dateOnlyTransformer })
   fecha: Date;
@@ -29,17 +30,16 @@ export class GastoOrmEntity {
   @Column({ type: 'varchar' })
   descripcion: string;
 
-  @Column({ type: 'enum', enum: EstadoPagoGasto, name: 'estado_pago' })
-  estadoPago: EstadoPagoGasto;
-
   @Column({
     type: 'numeric',
     precision: 14,
     scale: 2,
-    name: 'importe_total',
     transformer: decimalTransformer,
   })
-  importeTotal: Decimal;
+  importe: Decimal;
+
+  @Column({ type: 'enum', enum: EstadoPagoGasto, name: 'estado_pago' })
+  estadoPago: EstadoPagoGasto;
 
   @ManyToOne(() => PlazaOrmEntity, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'plaza_id' })
@@ -62,56 +62,57 @@ export class GastoOrmEntity {
   @Column({ type: 'varchar', name: 'pase_id', nullable: true })
   paseId: string | null;
 
-  // tipo = PERSONAL
   @Column({ type: 'varchar', name: 'empleado_id', nullable: true })
   empleadoId: string | null;
 
-  @Column({ type: 'varchar', name: 'asignacion_id', nullable: true })
-  asignacionId: string | null;
+  @Column({ type: 'varchar', name: 'cuenta_pago_id', nullable: true })
+  cuentaPagoId: string | null;
+
+  @Column({ type: 'enum', enum: TipoFiscal, name: 'tipo_fiscal', nullable: true })
+  tipoFiscal: TipoFiscal | null;
+
+  @Column({
+    type: 'numeric',
+    precision: 5,
+    scale: 2,
+    name: 'iva_percent',
+    nullable: true,
+    transformer: decimalNullableTransformer,
+  })
+  ivaPercent: Decimal | null;
 
   @Column({
     type: 'numeric',
     precision: 14,
     scale: 2,
-    name: 'importe_salario',
+    name: 'base_imponible',
     nullable: true,
     transformer: decimalNullableTransformer,
   })
-  importeSalario: Decimal | null;
+  baseImponible: Decimal | null;
 
   @Column({
     type: 'numeric',
     precision: 14,
     scale: 2,
-    name: 'coste_ss',
+    name: 'importe_iva',
     nullable: true,
     transformer: decimalNullableTransformer,
   })
-  costeSs: Decimal | null;
+  importeIva: Decimal | null;
 
   @Column({
     type: 'jsonb',
-    name: 'gastos_derivados',
     default: () => "'[]'",
-    transformer: gastosDerivadosTransformer,
+    transformer: gastoDetalleTransformer,
   })
-  gastosDerivados: GastoDerivado[];
+  detalle: GastoPersonalDetalle[];
 
-  // tipo = PLAZA
-  @Column({ type: 'enum', enum: CategoriaGastoPlaza, name: 'categoria_plaza', nullable: true })
-  categoriaPlaza: CategoriaGastoPlaza | null;
-
-  // tipo = GENERAL
-  @Column({ type: 'enum', enum: CategoriaGastoGeneral, name: 'categoria_general', nullable: true })
-  categoriaGeneral: CategoriaGastoGeneral | null;
-
-  // tipo = PLAZA | GENERAL
   @Column({
-    type: 'numeric',
-    precision: 14,
-    scale: 2,
-    nullable: true,
-    transformer: decimalNullableTransformer,
+    type: 'jsonb',
+    name: 'journal_entry_ids',
+    default: () => "'[]'",
+    transformer: stringArrayTransformer,
   })
-  importe: Decimal | null;
+  journalEntryIds: string[];
 }

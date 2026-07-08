@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsUUID } from 'class-validator';
-import { EstadoPagoGasto, TipoGasto } from '../../domain/gasto';
+import { EstadoPagoGasto } from '../../domain/gasto';
 
 export class ListarGastosQueryDto {
   @IsOptional()
@@ -7,8 +7,8 @@ export class ListarGastosQueryDto {
   plazaId?: string;
 
   @IsOptional()
-  @IsEnum(TipoGasto)
-  tipo?: TipoGasto;
+  @IsUUID()
+  categoriaId?: string;
 
   @IsOptional()
   @IsEnum(EstadoPagoGasto)

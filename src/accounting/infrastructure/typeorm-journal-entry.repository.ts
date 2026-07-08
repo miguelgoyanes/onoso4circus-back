@@ -96,4 +96,8 @@ export class TypeOrmJournalEntryRepository implements JournalEntryRepository {
     const entries = await qb.getMany();
     return entries.flatMap((entry) => entry.lines.map(toDomainLine));
   }
+
+  public async delete(id: string): Promise<void> {
+    await this.journalEntryRepo.delete({ id });
+  }
 }

@@ -26,6 +26,10 @@ export class AccountingService {
     await this.repository.save(entry);
   }
 
+  public async eliminarAsiento(id: string): Promise<void> {
+    await this.repository.delete(id);
+  }
+
   public async entriesByDimension(
     filter: EntriesByDimensionFilter,
   ): Promise<JournalLine[]> {

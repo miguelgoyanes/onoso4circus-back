@@ -8,18 +8,20 @@ import { PaseRepository } from '../../plazas/application/pase.repository';
 import { PlazaService } from '../../plazas/application/plaza.service';
 import { FechaService } from '../../plazas/application/fecha.service';
 import { PaseService } from '../../plazas/application/pase.service';
+import { Empleado } from '../../personal/domain/empleado';
+import { RegimenEmpleado } from '../../personal/domain/regimen-empleado';
+import { EmpleadoRepository } from '../../personal/application/empleado.repository';
+import { EmpleadoService } from '../../personal/application/empleado.service';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { InMemoryJournalEntryRepository } from '../../accounting/infrastructure/in-memory-journal-entry.repository';
 import { InMemoryAccountRepository } from '../../accounting/infrastructure/in-memory-account.repository';
 import { AccountType } from '../../accounting/domain/account';
-import {
-  CategoriaGastoGeneral,
-  CategoriaGastoPlaza,
-  ConceptoGastoDerivado,
-  EstadoPagoGasto,
-  TipoGasto,
-} from '../domain/gasto';
+import { EstadoPagoGasto } from '../domain/gasto';
+import { ConceptoPersonal } from '../domain/concepto-personal';
+import { TipoFiscal } from '../domain/tipo-fiscal';
 import { InMemoryGastoRepository } from '../infrastructure/in-memory-gasto.repository';
+import { InMemoryCategoriaGastoRepository } from '../infrastructure/in-memory-categoria-gasto.repository';
+import { CategoriaGastoService } from './categoria-gasto.service';
 import { GastoService } from './gasto.service';
 
 class InMemoryPlazaRepository implements PlazaRepository {
@@ -70,235 +72,305 @@ class InMemoryPaseRepository implements PaseRepository {
   }
 }
 
+class InMemoryEmpleadoRepository implements EmpleadoRepository {
+  private readonly empleados = new Map<string, Empleado>();
+  async save(empleado: Empleado): Promise<void> {
+    this.empleados.set(empleado.id, empleado);
+  }
+  async findById(id: string): Promise<Empleado | null> {
+    return this.empleados.get(id) ?? null;
+  }
+  async findAll(): Promise<Empleado[]> {
+    return [...this.empleados.values()];
+  }
+}
+
 describe('GastoService', () => {
   let plazaRepo: InMemoryPlazaRepository;
-  let fechaRepo: InMemoryFechaRepository;
   let plazaService: PlazaService;
-  let fechaService: FechaService;
-  let paseService: PaseService;
+  let empleadoRepo: InMemoryEmpleadoRepository;
+  let empleadoService: EmpleadoService;
   let accountingService: AccountingService;
+  let categoriaGastoService: CategoriaGastoService;
   let service: GastoService;
 
   beforeEach(() => {
     plazaRepo = new InMemoryPlazaRepository();
-    fechaRepo = new InMemoryFechaRepository();
+    const fechaRepo = new InMemoryFechaRepository();
     plazaService = new PlazaService(plazaRepo);
-    fechaService = new FechaService(fechaRepo, plazaRepo);
-    paseService = new PaseService(new InMemoryPaseRepository(), fechaRepo);
-    accountingService = new AccountingService(
-      new InMemoryJournalEntryRepository(),
-      new InMemoryAccountRepository(),
+    const fechaService = new FechaService(fechaRepo, plazaRepo);
+    const paseService = new PaseService(new InMemoryPaseRepository(), fechaRepo);
+    empleadoRepo = new InMemoryEmpleadoRepository();
+    empleadoService = new EmpleadoService(empleadoRepo);
+    accountingService = new AccountingService(new InMemoryJournalEntryRepository(), new InMemoryAccountRepository());
+    const gastoRepo = new InMemoryGastoRepository();
+    categoriaGastoService = new CategoriaGastoService(
+      new InMemoryCategoriaGastoRepository(),
+      gastoRepo,
+      accountingService,
     );
     service = new GastoService(
-      new InMemoryGastoRepository(),
+      gastoRepo,
+      categoriaGastoService,
       plazaService,
       fechaService,
       paseService,
+      empleadoService,
       accountingService,
     );
   });
 
   async function crearCuentasBase() {
-    await accountingService.crearCuenta({
-      nombre: 'Gasto de personal ligado a plaza',
-      code: '640001',
-      type: AccountType.EXPENSE,
-      esCuentaDeDinero: false,
-    });
-    await accountingService.crearCuenta({
-      nombre: 'Gasto de personal — estructura',
-      code: '641001',
-      type: AccountType.EXPENSE,
-      esCuentaDeDinero: false,
-    });
-    await accountingService.crearCuenta({
-      nombre: 'Seguridad Social a cargo de la empresa',
-      code: '642001',
-      type: AccountType.EXPENSE,
-      esCuentaDeDinero: false,
-    });
-    await accountingService.crearCuenta({
-      nombre: 'Gastos derivados de personal',
-      code: '643001',
-      type: AccountType.EXPENSE,
-      esCuentaDeDinero: false,
-    });
-    await accountingService.crearCuenta({
-      nombre: 'Gasto de montaje/plaza',
-      code: '620001',
-      type: AccountType.EXPENSE,
-      esCuentaDeDinero: false,
-    });
-    await accountingService.crearCuenta({
-      nombre: 'Gastos generales / estructura',
-      code: '629001',
-      type: AccountType.EXPENSE,
-      esCuentaDeDinero: false,
-    });
-    await accountingService.crearCuenta({
-      nombre: 'Proveedores / Pendiente de pago',
-      code: '400001',
-      type: AccountType.LIABILITY,
-      esCuentaDeDinero: false,
-    });
-    await accountingService.crearCuenta({
-      nombre: 'Tesorería general',
-      code: '570001',
-      type: AccountType.ASSET,
-      esCuentaDeDinero: true,
-    });
+    const cuentas: [string, string, AccountType][] = [
+      ['640001', 'Gasto de personal ligado a plaza', AccountType.EXPENSE],
+      ['641001', 'Gasto de personal — estructura', AccountType.EXPENSE],
+      ['642001', 'Seguridad Social a cargo de la empresa', AccountType.EXPENSE],
+      ['643001', 'Gastos derivados de personal', AccountType.EXPENSE],
+      ['472001', 'Hacienda Pública, IVA soportado', AccountType.ASSET],
+      ['400001', 'Proveedores / Pendiente de pago', AccountType.LIABILITY],
+      ['570001', 'Tesorería general', AccountType.ASSET],
+    ];
+    for (const [code, nombre, type] of cuentas) {
+      await accountingService.crearCuenta({ nombre, code, type, esCuentaDeDinero: code === '570001' });
+    }
   }
 
-  it('registra un gasto PERSONAL con plaza contra 640001', async () => {
+  async function crearCategoriaPersonal() {
+    return categoriaGastoService.sembrarPredefinidaSiNoExiste({
+      nombre: 'Personal: Pago a empleado',
+      cuentaContableId: null,
+      requiereEmpleado: true,
+      esPagoPersonal: true,
+      aplicaIva: false,
+    }).then(() => categoriaGastoService.listarConUso().then((all) => all.find((c) => c.categoria.nombre === 'Personal: Pago a empleado')!.categoria));
+  }
+
+  async function crearCategoriaNormal(aplicaIva: boolean, code = '629006') {
+    return categoriaGastoService.crear('Gestoría', code, false, aplicaIva);
+  }
+
+  async function crearEmpleado(regimen: RegimenEmpleado) {
+    return empleadoService.crear('Juan', 'malabarista', regimen);
+  }
+
+  it('categoría normal sin IVA: una línea de débito a la cuenta de la categoría', async () => {
     await crearCuentasBase();
-    const plaza = await plazaService.crear('Feria de Julio', 'Madrid');
+    const categoria = await crearCategoriaNormal(false);
     const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
 
     const gasto = await service.crear({
-      tipo: TipoGasto.PERSONAL,
+      categoriaId: categoria.id,
       fecha: new Date('2026-07-10'),
-      descripcion: 'Pago al cómico',
+      descripcion: 'Gestoría de julio',
       estadoPago: EstadoPagoGasto.PAGADO,
       cuentaPagoId: cuentaPago.id,
-      plazaId: plaza.id,
-      empleadoId: 'emp-1',
-      importeSalario: 200,
-    });
-
-    expect(gasto.importeTotal.equals(new Decimal(200))).toBe(true);
-    const cuenta640001 = await accountingService.obtenerCuentaPorCodigo('640001');
-    expect((await accountingService.saldoPorCuenta(cuenta640001.id)).equals(new Decimal(200))).toBe(
-      true,
-    );
-    expect((await accountingService.saldoPorCuenta(cuentaPago.id)).equals(new Decimal(-200))).toBe(
-      true,
-    );
-  });
-
-  it('registra un gasto PERSONAL sin plaza (ej. cuota de autónomo) contra 641001', async () => {
-    await crearCuentasBase();
-    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
-
-    await service.crear({
-      tipo: TipoGasto.PERSONAL,
-      fecha: new Date('2026-07-10'),
-      descripcion: 'Cuota de autónomo de Brandon',
-      estadoPago: EstadoPagoGasto.PAGADO,
-      cuentaPagoId: cuentaPago.id,
-      empleadoId: 'brandon',
-      importeSalario: 300,
-    });
-
-    const cuenta641001 = await accountingService.obtenerCuentaPorCodigo('641001');
-    expect((await accountingService.saldoPorCuenta(cuenta641001.id)).equals(new Decimal(300))).toBe(
-      true,
-    );
-  });
-
-  it('registra coste_ss (642001) y gastos_derivados (643001, con categoryTag) sumando al total', async () => {
-    await crearCuentasBase();
-    const plaza = await plazaService.crear('Feria de Julio', 'Madrid');
-    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
-
-    const gasto = await service.crear({
-      tipo: TipoGasto.PERSONAL,
-      fecha: new Date('2026-07-10'),
-      descripcion: 'Pago con SS y dietas',
-      estadoPago: EstadoPagoGasto.PAGADO,
-      cuentaPagoId: cuentaPago.id,
-      plazaId: plaza.id,
-      empleadoId: 'emp-1',
-      importeSalario: 100,
-      costeSs: 30,
-      gastosDerivados: [{ concepto: ConceptoGastoDerivado.DIETA, importe: 20 }],
-    });
-
-    expect(gasto.importeTotal.equals(new Decimal(150))).toBe(true);
-
-    const cuenta642001 = await accountingService.obtenerCuentaPorCodigo('642001');
-    expect((await accountingService.saldoPorCuenta(cuenta642001.id)).equals(new Decimal(30))).toBe(
-      true,
-    );
-    const cuenta643001 = await accountingService.obtenerCuentaPorCodigo('643001');
-    expect((await accountingService.saldoPorCuenta(cuenta643001.id)).equals(new Decimal(20))).toBe(
-      true,
-    );
-
-    const lineas = await accountingService.entriesByDimension({ accountId: cuenta643001.id });
-    expect(lineas[0]?.dimensions.categoryTag).toBe(ConceptoGastoDerivado.DIETA);
-  });
-
-  it('registra un gasto PLAZA contra 620001 con categoryTag de la categoría', async () => {
-    await crearCuentasBase();
-    const plaza = await plazaService.crear('Feria de Julio', 'Madrid');
-    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
-
-    await service.crear({
-      tipo: TipoGasto.PLAZA,
-      fecha: new Date('2026-07-10'),
-      descripcion: 'Montaje de carpa',
-      estadoPago: EstadoPagoGasto.PAGADO,
-      cuentaPagoId: cuentaPago.id,
-      plazaId: plaza.id,
-      categoriaPlaza: CategoriaGastoPlaza.MONTAJE,
-      importe: 300,
-    });
-
-    const cuenta620001 = await accountingService.obtenerCuentaPorCodigo('620001');
-    expect((await accountingService.saldoPorCuenta(cuenta620001.id)).equals(new Decimal(300))).toBe(
-      true,
-    );
-  });
-
-  it('registra un gasto GENERAL contra 629001', async () => {
-    await crearCuentasBase();
-    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
-
-    await service.crear({
-      tipo: TipoGasto.GENERAL,
-      fecha: new Date('2026-07-10'),
-      descripcion: 'Gestoría',
-      estadoPago: EstadoPagoGasto.PAGADO,
-      cuentaPagoId: cuentaPago.id,
-      categoriaGeneral: CategoriaGastoGeneral.GESTORIA,
       importe: 80,
     });
 
-    const cuenta629001 = await accountingService.obtenerCuentaPorCodigo('629001');
-    expect((await accountingService.saldoPorCuenta(cuenta629001.id)).equals(new Decimal(80))).toBe(
-      true,
-    );
+    expect(gasto.importe.equals(new Decimal(80))).toBe(true);
+    expect(gasto.tipoFiscal).toBeUndefined();
+    const cuentaCategoria = await accountingService.obtenerCuentaPorId(categoria.cuentaContableId!);
+    expect((await accountingService.saldoPorCuenta(cuentaCategoria.id)).equals(new Decimal(80))).toBe(true);
+  });
+
+  it('categoría normal con IVA tipoFiscal=B: comportamiento simple, sin repartir', async () => {
+    await crearCuentasBase();
+    const categoria = await crearCategoriaNormal(true);
+    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+    const gasto = await service.crear({
+      categoriaId: categoria.id,
+      fecha: new Date('2026-07-10'),
+      descripcion: 'Gestoría de julio',
+      estadoPago: EstadoPagoGasto.PAGADO,
+      cuentaPagoId: cuentaPago.id,
+      importe: 80,
+      tipoFiscal: TipoFiscal.B,
+    });
+
+    expect(gasto.importe.equals(new Decimal(80))).toBe(true);
+    expect(gasto.tipoFiscal).toBe(TipoFiscal.B);
+    expect(gasto.importeIva?.equals(new Decimal(0))).toBe(true);
+    const cuenta472001 = await accountingService.obtenerCuentaPorCodigo('472001');
+    expect((await accountingService.saldoPorCuenta(cuenta472001.id)).equals(new Decimal(0))).toBe(true);
+  });
+
+  it('categoría normal con IVA tipoFiscal=A: reparte en base imponible + IVA soportado (472001)', async () => {
+    await crearCuentasBase();
+    const categoria = await crearCategoriaNormal(true);
+    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+    const gasto = await service.crear({
+      categoriaId: categoria.id,
+      fecha: new Date('2026-07-10'),
+      descripcion: 'Material de montaje',
+      estadoPago: EstadoPagoGasto.PAGADO,
+      cuentaPagoId: cuentaPago.id,
+      tipoFiscal: TipoFiscal.A,
+      baseImponible: 100,
+      ivaPercent: 21,
+    });
+
+    expect(gasto.importe.equals(new Decimal(121))).toBe(true);
+    expect(gasto.baseImponible?.equals(new Decimal(100))).toBe(true);
+    expect(gasto.importeIva?.equals(new Decimal(21))).toBe(true);
+
+    const cuentaCategoria = await accountingService.obtenerCuentaPorId(categoria.cuentaContableId!);
+    expect((await accountingService.saldoPorCuenta(cuentaCategoria.id)).equals(new Decimal(100))).toBe(true);
+    const cuenta472001 = await accountingService.obtenerCuentaPorCodigo('472001');
+    expect((await accountingService.saldoPorCuenta(cuenta472001.id)).equals(new Decimal(21))).toBe(true);
+    const cuentaPagoResuelta = await accountingService.obtenerCuentaPorId(cuentaPago.id);
+    expect((await accountingService.saldoPorCuenta(cuentaPagoResuelta.id)).equals(new Decimal(-121))).toBe(true);
+  });
+
+  it('personal CUENTA_AJENA: SALARIO a 640001/641001 y SEGURIDAD_SOCIAL a 642001, sin IVA nunca', async () => {
+    await crearCuentasBase();
+    const categoria = await crearCategoriaPersonal();
+    const empleado = await crearEmpleado(RegimenEmpleado.CUENTA_AJENA);
+    const plaza = await plazaService.crear('Feria de Julio', 'Madrid');
+    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+    const gasto = await service.crear({
+      categoriaId: categoria.id,
+      fecha: new Date('2026-07-10'),
+      descripcion: 'Pago a Juan',
+      estadoPago: EstadoPagoGasto.PAGADO,
+      cuentaPagoId: cuentaPago.id,
+      plazaId: plaza.id,
+      empleadoId: empleado.id,
+      conceptos: [
+        { concepto: ConceptoPersonal.SALARIO, importe: 100 },
+        { concepto: ConceptoPersonal.SEGURIDAD_SOCIAL, importe: 30 },
+        { concepto: ConceptoPersonal.DIETA, importe: 20 },
+      ],
+    });
+
+    expect(gasto.importe.equals(new Decimal(150))).toBe(true);
+    expect(gasto.tipoFiscal).toBeUndefined();
+    const cuenta640001 = await accountingService.obtenerCuentaPorCodigo('640001');
+    expect((await accountingService.saldoPorCuenta(cuenta640001.id)).equals(new Decimal(100))).toBe(true);
+    const cuenta642001 = await accountingService.obtenerCuentaPorCodigo('642001');
+    expect((await accountingService.saldoPorCuenta(cuenta642001.id)).equals(new Decimal(30))).toBe(true);
+    const cuenta643001 = await accountingService.obtenerCuentaPorCodigo('643001');
+    expect((await accountingService.saldoPorCuenta(cuenta643001.id)).equals(new Decimal(20))).toBe(true);
+  });
+
+  it('personal sin plaza (ej. cuota de autónomo): SALARIO va a 641001', async () => {
+    await crearCuentasBase();
+    const categoria = await crearCategoriaPersonal();
+    const empleado = await crearEmpleado(RegimenEmpleado.AUTONOMO);
+    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+    await service.crear({
+      categoriaId: categoria.id,
+      fecha: new Date('2026-07-10'),
+      descripcion: 'Cuota de autónomo',
+      estadoPago: EstadoPagoGasto.PAGADO,
+      cuentaPagoId: cuentaPago.id,
+      empleadoId: empleado.id,
+      conceptos: [{ concepto: ConceptoPersonal.SALARIO, importe: 300 }],
+    });
+
+    const cuenta641001 = await accountingService.obtenerCuentaPorCodigo('641001');
+    expect((await accountingService.saldoPorCuenta(cuenta641001.id)).equals(new Decimal(300))).toBe(true);
+  });
+
+  it('personal AUTONOMO con SALARIO tipoFiscal=A: reparte esa línea en base + IVA soportado', async () => {
+    await crearCuentasBase();
+    const categoria = await crearCategoriaPersonal();
+    const empleado = await crearEmpleado(RegimenEmpleado.AUTONOMO);
+    const plaza = await plazaService.crear('Feria de Julio', 'Madrid');
+    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+    const gasto = await service.crear({
+      categoriaId: categoria.id,
+      fecha: new Date('2026-07-10'),
+      descripcion: 'Pago a artista autónomo',
+      estadoPago: EstadoPagoGasto.PAGADO,
+      cuentaPagoId: cuentaPago.id,
+      plazaId: plaza.id,
+      empleadoId: empleado.id,
+      conceptos: [
+        { concepto: ConceptoPersonal.SALARIO, tipoFiscal: TipoFiscal.A, baseImponible: 100, ivaPercent: 21 },
+      ],
+    });
+
+    expect(gasto.importe.equals(new Decimal(121))).toBe(true);
+    expect(gasto.tipoFiscal).toBe(TipoFiscal.A);
+    const cuenta640001 = await accountingService.obtenerCuentaPorCodigo('640001');
+    expect((await accountingService.saldoPorCuenta(cuenta640001.id)).equals(new Decimal(100))).toBe(true);
+    const cuenta472001 = await accountingService.obtenerCuentaPorCodigo('472001');
+    expect((await accountingService.saldoPorCuenta(cuenta472001.id)).equals(new Decimal(21))).toBe(true);
+  });
+
+  it('rechaza SEGURIDAD_SOCIAL si el empleado es AUTONOMO', async () => {
+    await crearCuentasBase();
+    const categoria = await crearCategoriaPersonal();
+    const empleado = await crearEmpleado(RegimenEmpleado.AUTONOMO);
+    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+    await expect(
+      service.crear({
+        categoriaId: categoria.id,
+        fecha: new Date('2026-07-10'),
+        descripcion: 'x',
+        estadoPago: EstadoPagoGasto.PAGADO,
+        cuentaPagoId: cuentaPago.id,
+        empleadoId: empleado.id,
+        conceptos: [
+          { concepto: ConceptoPersonal.SALARIO, importe: 100 },
+          { concepto: ConceptoPersonal.SEGURIDAD_SOCIAL, importe: 30 },
+        ],
+      }),
+    ).rejects.toThrow(/SEGURIDAD_SOCIAL solo aplica a empleados CUENTA_AJENA/i);
+  });
+
+  it('rechaza tipoFiscal en SALARIO si el empleado es CUENTA_AJENA', async () => {
+    await crearCuentasBase();
+    const categoria = await crearCategoriaPersonal();
+    const empleado = await crearEmpleado(RegimenEmpleado.CUENTA_AJENA);
+    const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+    await expect(
+      service.crear({
+        categoriaId: categoria.id,
+        fecha: new Date('2026-07-10'),
+        descripcion: 'x',
+        estadoPago: EstadoPagoGasto.PAGADO,
+        cuentaPagoId: cuentaPago.id,
+        empleadoId: empleado.id,
+        conceptos: [{ concepto: ConceptoPersonal.SALARIO, tipoFiscal: TipoFiscal.B, importe: 100 }],
+      }),
+    ).rejects.toThrow(/CUENTA_AJENA nunca lleva IVA/i);
   });
 
   it('un gasto PENDIENTE_PAGO no requiere cuentaPagoId y credita Proveedores (400001)', async () => {
     await crearCuentasBase();
+    const categoria = await crearCategoriaNormal(false);
 
     const gasto = await service.crear({
-      tipo: TipoGasto.GENERAL,
+      categoriaId: categoria.id,
       fecha: new Date('2026-07-10'),
-      descripcion: 'Factura de marketing a 30 días',
+      descripcion: 'Factura a 30 días',
       estadoPago: EstadoPagoGasto.PENDIENTE_PAGO,
-      categoriaGeneral: CategoriaGastoGeneral.MARKETING,
       importe: 120,
     });
 
     expect(gasto.estadoPago).toBe(EstadoPagoGasto.PENDIENTE_PAGO);
     const cuenta400001 = await accountingService.obtenerCuentaPorCodigo('400001');
-    expect((await accountingService.saldoPorCuenta(cuenta400001.id)).equals(new Decimal(120))).toBe(
-      true,
-    );
+    expect((await accountingService.saldoPorCuenta(cuenta400001.id)).equals(new Decimal(120))).toBe(true);
   });
 
   it('pagarPendiente liquida contra Proveedores y marca el gasto como PAGADO', async () => {
     await crearCuentasBase();
+    const categoria = await crearCategoriaNormal(false);
     const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
 
     const gasto = await service.crear({
-      tipo: TipoGasto.GENERAL,
+      categoriaId: categoria.id,
       fecha: new Date('2026-07-10'),
-      descripcion: 'Factura de marketing a 30 días',
+      descripcion: 'Factura a 30 días',
       estadoPago: EstadoPagoGasto.PENDIENTE_PAGO,
-      categoriaGeneral: CategoriaGastoGeneral.MARKETING,
       importe: 120,
     });
 
@@ -306,91 +378,167 @@ describe('GastoService', () => {
     expect(pagado.estadoPago).toBe(EstadoPagoGasto.PAGADO);
 
     const cuenta400001 = await accountingService.obtenerCuentaPorCodigo('400001');
-    expect((await accountingService.saldoPorCuenta(cuenta400001.id)).equals(new Decimal(0))).toBe(
-      true,
-    );
-    expect((await accountingService.saldoPorCuenta(cuentaPago.id)).equals(new Decimal(-120))).toBe(
-      true,
-    );
+    expect((await accountingService.saldoPorCuenta(cuenta400001.id)).equals(new Decimal(0))).toBe(true);
 
-    await expect(service.pagarPendiente(gasto.id, cuentaPago.id)).rejects.toThrow(
-      /ya está pagado/i,
-    );
+    await expect(service.pagarPendiente(gasto.id, cuentaPago.id)).rejects.toThrow(/ya está pagado/i);
   });
 
   it('rechaza un gasto PAGADO sin cuentaPagoId', async () => {
     await crearCuentasBase();
+    const categoria = await crearCategoriaNormal(false);
     await expect(
       service.crear({
-        tipo: TipoGasto.GENERAL,
+        categoriaId: categoria.id,
         fecha: new Date('2026-07-10'),
         descripcion: 'x',
         estadoPago: EstadoPagoGasto.PAGADO,
-        categoriaGeneral: CategoriaGastoGeneral.OTRO,
         importe: 10,
       }),
     ).rejects.toThrow(/cuentaPagoId es obligatorio/i);
   });
 
-  it('rechaza un gasto PERSONAL sin empleadoId', async () => {
+  it('rechaza un gasto de categoría con requiereEmpleado sin empleadoId', async () => {
     await crearCuentasBase();
+    const categoria = await crearCategoriaPersonal();
     const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
     await expect(
       service.crear({
-        tipo: TipoGasto.PERSONAL,
+        categoriaId: categoria.id,
         fecha: new Date('2026-07-10'),
         descripcion: 'x',
         estadoPago: EstadoPagoGasto.PAGADO,
         cuentaPagoId: cuentaPago.id,
-        importeSalario: 100,
+        conceptos: [{ concepto: ConceptoPersonal.SALARIO, importe: 100 }],
       }),
     ).rejects.toThrow(/empleadoId es obligatorio/i);
   });
 
   it('rechaza crear un gasto si la plaza indicada no existe', async () => {
     await crearCuentasBase();
+    const categoria = await crearCategoriaNormal(false);
     const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
     await expect(
       service.crear({
-        tipo: TipoGasto.PLAZA,
+        categoriaId: categoria.id,
         fecha: new Date('2026-07-10'),
         descripcion: 'x',
         estadoPago: EstadoPagoGasto.PAGADO,
         cuentaPagoId: cuentaPago.id,
         plazaId: 'no-existe',
-        categoriaPlaza: CategoriaGastoPlaza.OTRO,
         importe: 10,
       }),
     ).rejects.toThrow(/no encontrada/i);
   });
 
-  it('lista gastos filtrando por plazaId, tipo y estadoPago', async () => {
+  it('lista gastos filtrando por plazaId, categoriaId y estadoPago', async () => {
     await crearCuentasBase();
+    const categoriaA = await crearCategoriaNormal(false, '629006');
+    const categoriaB = await crearCategoriaNormal(false, '629007');
     const plaza = await plazaService.crear('Feria de Julio', 'Madrid');
     const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
 
     await service.crear({
-      tipo: TipoGasto.PLAZA,
+      categoriaId: categoriaA.id,
       fecha: new Date('2026-07-10'),
-      descripcion: 'Montaje',
+      descripcion: 'Con plaza',
       estadoPago: EstadoPagoGasto.PAGADO,
       cuentaPagoId: cuentaPago.id,
       plazaId: plaza.id,
-      categoriaPlaza: CategoriaGastoPlaza.MONTAJE,
       importe: 50,
     });
     await service.crear({
-      tipo: TipoGasto.GENERAL,
+      categoriaId: categoriaB.id,
       fecha: new Date('2026-07-10'),
-      descripcion: 'Gestoría',
+      descripcion: 'Sin plaza',
       estadoPago: EstadoPagoGasto.PENDIENTE_PAGO,
-      categoriaGeneral: CategoriaGastoGeneral.GESTORIA,
       importe: 40,
     });
 
     expect(await service.listar({ plazaId: plaza.id })).toHaveLength(1);
-    expect(await service.listar({ tipo: TipoGasto.GENERAL })).toHaveLength(1);
+    expect(await service.listar({ categoriaId: categoriaB.id })).toHaveLength(1);
     expect(await service.listar({ estadoPago: EstadoPagoGasto.PENDIENTE_PAGO })).toHaveLength(1);
     expect(await service.listar()).toHaveLength(2);
+  });
+
+  describe('eliminar', () => {
+    it('elimina un gasto PAGADO y revierte el saldo de las cuentas afectadas', async () => {
+      await crearCuentasBase();
+      const categoria = await crearCategoriaNormal(false);
+      const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+      const gasto = await service.crear({
+        categoriaId: categoria.id,
+        fecha: new Date('2026-07-10'),
+        descripcion: 'Gestoría',
+        estadoPago: EstadoPagoGasto.PAGADO,
+        cuentaPagoId: cuentaPago.id,
+        importe: 80,
+      });
+
+      await service.eliminar(gasto.id);
+
+      await expect(service.obtener(gasto.id)).rejects.toThrow(/no encontrado/i);
+      const cuentaCategoria = await accountingService.obtenerCuentaPorId(categoria.cuentaContableId!);
+      expect((await accountingService.saldoPorCuenta(cuentaCategoria.id)).equals(new Decimal(0))).toBe(true);
+      expect((await accountingService.saldoPorCuenta(cuentaPago.id)).equals(new Decimal(0))).toBe(true);
+    });
+
+    it('elimina un gasto que fue PENDIENTE_PAGO y ya se pagó, revirtiendo ambos asientos', async () => {
+      await crearCuentasBase();
+      const categoria = await crearCategoriaNormal(false);
+      const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+      const gasto = await service.crear({
+        categoriaId: categoria.id,
+        fecha: new Date('2026-07-10'),
+        descripcion: 'Factura a 30 días',
+        estadoPago: EstadoPagoGasto.PENDIENTE_PAGO,
+        importe: 120,
+      });
+      const pagado = await service.pagarPendiente(gasto.id, cuentaPago.id);
+      expect(pagado.journalEntryIds).toHaveLength(2);
+
+      await service.eliminar(gasto.id);
+
+      const cuenta400001 = await accountingService.obtenerCuentaPorCodigo('400001');
+      expect((await accountingService.saldoPorCuenta(cuenta400001.id)).equals(new Decimal(0))).toBe(true);
+      expect((await accountingService.saldoPorCuenta(cuentaPago.id)).equals(new Decimal(0))).toBe(true);
+    });
+
+    it('permite eliminar un gasto PENDIENTE_PAGO sin pagar', async () => {
+      await crearCuentasBase();
+      const categoria = await crearCategoriaNormal(false);
+
+      const gasto = await service.crear({
+        categoriaId: categoria.id,
+        fecha: new Date('2026-07-10'),
+        descripcion: 'Factura a 30 días',
+        estadoPago: EstadoPagoGasto.PENDIENTE_PAGO,
+        importe: 120,
+      });
+
+      await expect(service.eliminar(gasto.id)).resolves.toBeUndefined();
+      const cuenta400001 = await accountingService.obtenerCuentaPorCodigo('400001');
+      expect((await accountingService.saldoPorCuenta(cuenta400001.id)).equals(new Decimal(0))).toBe(true);
+    });
+
+    it('una categoría deja de estar "usada" tras eliminar su único gasto', async () => {
+      await crearCuentasBase();
+      const categoria = await crearCategoriaNormal(false);
+      const cuentaPago = await accountingService.obtenerCuentaPorCodigo('570001');
+
+      const gasto = await service.crear({
+        categoriaId: categoria.id,
+        fecha: new Date('2026-07-10'),
+        descripcion: 'Gestoría',
+        estadoPago: EstadoPagoGasto.PAGADO,
+        cuentaPagoId: cuentaPago.id,
+        importe: 80,
+      });
+
+      expect((await categoriaGastoService.obtenerConUso(categoria.id)).usada).toBe(true);
+      await service.eliminar(gasto.id);
+      expect((await categoriaGastoService.obtenerConUso(categoria.id)).usada).toBe(false);
+    });
   });
 });

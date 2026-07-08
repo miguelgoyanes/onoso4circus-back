@@ -13,6 +13,7 @@ export interface EntriesByDimensionFilter {
 export interface JournalEntryRepository {
   save(entry: JournalEntry): Promise<void>;
   findLinesByDimension(filter: EntriesByDimensionFilter): Promise<JournalLine[]>;
+  delete(id: string): Promise<void>;
 }
 
 export const JOURNAL_ENTRY_REPOSITORY = Symbol('JOURNAL_ENTRY_REPOSITORY');

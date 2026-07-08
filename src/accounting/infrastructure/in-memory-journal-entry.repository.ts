@@ -8,10 +8,14 @@ import {
 
 @Injectable()
 export class InMemoryJournalEntryRepository implements JournalEntryRepository {
-  private readonly entries: JournalEntry[] = [];
+  private entries: JournalEntry[] = [];
 
   public async save(entry: JournalEntry): Promise<void> {
     this.entries.push(entry);
+  }
+
+  public async delete(id: string): Promise<void> {
+    this.entries = this.entries.filter((entry) => entry.id !== id);
   }
 
   public async findLinesByDimension(
