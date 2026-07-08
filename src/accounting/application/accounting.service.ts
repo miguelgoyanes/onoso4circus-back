@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { Account, AccountType } from '../domain/account';
 import { JournalEntry } from '../domain/journal-entry';
@@ -59,6 +59,22 @@ export class AccountingService {
 
   public async listarCuentasDeDinero(): Promise<Account[]> {
     return this.accountRepository.findCuentasDeDinero();
+  }
+
+  public async obtenerCuentaPorId(id: string): Promise<Account> {
+    const cuenta = await this.accountRepository.findById(id);
+    if (!cuenta) {
+      throw new NotFoundException(`Cuenta ${id} no encontrada`);
+    }
+    return cuenta;
+  }
+
+  public async obtenerCuentaPorCodigo(code: string): Promise<Account> {
+    const cuenta = await this.accountRepository.findByCode(code);
+    if (!cuenta) {
+      throw new NotFoundException(`No existe la cuenta ${code}. Créala primero en Tesorería.`);
+    }
+    return cuenta;
   }
 
   public async saldoPorCuenta(accountId: string): Promise<Decimal> {

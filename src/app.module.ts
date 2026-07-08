@@ -7,6 +7,7 @@ import { AccountingModule } from './accounting/accounting.module';
 import { AuthModule } from './auth/auth.module';
 import { PlazasModule } from './plazas/plazas.module';
 import { TesoreriaModule } from './tesoreria/tesoreria.module';
+import { GastosModule } from './gastos/gastos.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { TesoreriaModule } from './tesoreria/tesoreria.module';
     AuthModule,
     PlazasModule,
     TesoreriaModule,
+    GastosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
