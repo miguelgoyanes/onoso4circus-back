@@ -173,4 +173,85 @@ describe('Tesorería (integración contra Postgres real)', () => {
     const cuentas = await controller.listarCuentas();
     expect(cuentas.find((c) => c.id === cuenta.id)).toBeUndefined();
   });
+
+  it('edita y elimina una transferencia, y el saldo se recalcula cada vez', async () => {
+    const origen = await controller.crearCuenta({
+      nombre: `Caja edit ${randomUUID()}`,
+      tipo: TipoCuentaDinero.CAJA,
+      usableEnTaquilla: false,
+      usableEnBar: false,
+    });
+    const destino = await controller.crearCuenta({
+      nombre: `Banco edit ${randomUUID()}`,
+      tipo: TipoCuentaDinero.BANCO,
+      usableEnTaquilla: false,
+      usableEnBar: false,
+    });
+    await controller.registrarMovimientoCapital({ cuentaId: origen.id, tipo: TipoMovimientoCapital.ENTRADA, importe: 100 });
+
+    await controller.transferir({ origenId: origen.id, destinoId: destino.id, importe: 30 });
+    const movimientos = await controller.movimientos(destino.id);
+    const transferenciaId = movimientos[0].origenId;
+    expect(movimientos[0].origenTipo).toBe('TRANSFERENCIA');
+    expect(transferenciaId).toBeTruthy();
+
+    await controller.actualizarTransferencia(transferenciaId!, { origenId: origen.id, destinoId: destino.id, importe: 60 });
+    expect((await controller.obtenerCuenta(origen.id)).saldo).toBe('40');
+    expect((await controller.obtenerCuenta(destino.id)).saldo).toBe('60');
+
+    await controller.eliminarTransferencia(transferenciaId!);
+    expect((await controller.obtenerCuenta(origen.id)).saldo).toBe('100');
+    expect((await controller.obtenerCuenta(destino.id)).saldo).toBe('0');
+  });
+
+  it('edita y elimina un movimiento de capital', async () => {
+    const cuenta = await controller.crearCuenta({
+      nombre: `Caja capital edit ${randomUUID()}`,
+      tipo: TipoCuentaDinero.CAJA,
+      usableEnTaquilla: false,
+      usableEnBar: false,
+    });
+
+    await controller.registrarMovimientoCapital({ cuentaId: cuenta.id, tipo: TipoMovimientoCapital.ENTRADA, importe: 200 });
+    const movimientos = await controller.movimientos(cuenta.id);
+    const movimientoId = movimientos[0].origenId;
+    expect(movimientos[0].origenTipo).toBe('CAPITAL');
+
+    await controller.actualizarMovimientoCapital(movimientoId!, { tipo: TipoMovimientoCapital.SALIDA, importe: 20 });
+    expect((await controller.obtenerCuenta(cuenta.id)).saldo).toBe('-20');
+
+    await controller.eliminarMovimientoCapital(movimientoId!);
+    expect((await controller.obtenerCuenta(cuenta.id)).saldo).toBe('0');
+  });
+
+  it('ajuste de arqueo: crear con falta, editar y eliminar, siempre dejando la caja consistente', async () => {
+    const caja = await controller.crearCuenta({
+      nombre: `Caja ajuste ${randomUUID()}`,
+      tipo: TipoCuentaDinero.CAJA,
+      usableEnTaquilla: false,
+      usableEnBar: false,
+    });
+    await controller.registrarMovimientoCapital({ cuentaId: caja.id, tipo: TipoMovimientoCapital.ENTRADA, importe: 100 });
+
+    const ajuste = await controller.crearAjusteArqueo(caja.id, { importeReal: 90 });
+    expect(ajuste.diferencia).toBe('-10');
+    expect((await controller.obtenerCuenta(caja.id)).saldo).toBe('90');
+
+    const actualizado = await controller.actualizarAjusteArqueo(ajuste.id, { importeReal: 100 });
+    expect(actualizado.diferencia).toBe('0');
+    expect((await controller.obtenerCuenta(caja.id)).saldo).toBe('100');
+
+    await controller.eliminarAjusteArqueo(actualizado.id);
+    expect((await controller.obtenerCuenta(caja.id)).saldo).toBe('100');
+  });
+
+  it('rechaza crear un ajuste de arqueo sobre una cuenta tipo Banco', async () => {
+    const banco = await controller.crearCuenta({
+      nombre: `Banco no caja ${randomUUID()}`,
+      tipo: TipoCuentaDinero.BANCO,
+      usableEnTaquilla: false,
+      usableEnBar: false,
+    });
+    await expect(controller.crearAjusteArqueo(banco.id, { importeReal: 10 })).rejects.toThrow(/tipo Caja/i);
+  });
 });

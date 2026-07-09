@@ -8,8 +8,13 @@ import { CrearCuentaDineroDto } from './dto/crear-cuenta-dinero.dto';
 import { ActualizarCuentaDineroDto } from './dto/actualizar-cuenta-dinero.dto';
 import { TransferenciaDto } from './dto/transferencia.dto';
 import { MovimientoCapitalDto } from './dto/movimiento-capital.dto';
+import { ActualizarMovimientoCapitalDto } from './dto/actualizar-movimiento-capital.dto';
+import { AjusteArqueoDto } from './dto/ajuste-arqueo.dto';
 import { CuentaDineroPublica, toCuentaDineroPublica } from './cuenta-dinero.presenter';
 import { MovimientoCuentaPublico, toMovimientoCuentaPublico } from './movimiento-cuenta.presenter';
+import { TransferenciaPublica, toTransferenciaPublica } from './transferencia.presenter';
+import { MovimientoCapitalPublico, toMovimientoCapitalPublico } from './movimiento-capital.presenter';
+import { AjusteArqueoPublico, toAjusteArqueoPublico } from './ajuste-arqueo.presenter';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Rol.ADMIN)
@@ -74,9 +79,84 @@ export class TesoreriaController {
     return { ok: true };
   }
 
+  @Get('transferencias/:id')
+  public async obtenerTransferencia(@Param('id') id: string): Promise<TransferenciaPublica> {
+    return toTransferenciaPublica(await this.cuentaDineroService.obtenerTransferencia(id));
+  }
+
+  @Patch('transferencias/:id')
+  public async actualizarTransferencia(
+    @Param('id') id: string,
+    @Body() dto: TransferenciaDto,
+  ): Promise<TransferenciaPublica> {
+    const transferencia = await this.cuentaDineroService.actualizarTransferencia(
+      id,
+      dto.origenId,
+      dto.destinoId,
+      dto.importe,
+      dto.concepto,
+    );
+    return toTransferenciaPublica(transferencia);
+  }
+
+  @Delete('transferencias/:id')
+  public async eliminarTransferencia(@Param('id') id: string): Promise<{ ok: true }> {
+    await this.cuentaDineroService.eliminarTransferencia(id);
+    return { ok: true };
+  }
+
   @Post('movimientos-capital')
   public async registrarMovimientoCapital(@Body() dto: MovimientoCapitalDto): Promise<{ ok: true }> {
     await this.cuentaDineroService.registrarMovimientoCapital(dto.cuentaId, dto.tipo, dto.importe, dto.concepto);
+    return { ok: true };
+  }
+
+  @Get('movimientos-capital/:id')
+  public async obtenerMovimientoCapital(@Param('id') id: string): Promise<MovimientoCapitalPublico> {
+    return toMovimientoCapitalPublico(await this.cuentaDineroService.obtenerMovimientoCapital(id));
+  }
+
+  @Patch('movimientos-capital/:id')
+  public async actualizarMovimientoCapital(
+    @Param('id') id: string,
+    @Body() dto: ActualizarMovimientoCapitalDto,
+  ): Promise<MovimientoCapitalPublico> {
+    const movimiento = await this.cuentaDineroService.actualizarMovimientoCapital(id, dto.tipo, dto.importe, dto.concepto);
+    return toMovimientoCapitalPublico(movimiento);
+  }
+
+  @Delete('movimientos-capital/:id')
+  public async eliminarMovimientoCapital(@Param('id') id: string): Promise<{ ok: true }> {
+    await this.cuentaDineroService.eliminarMovimientoCapital(id);
+    return { ok: true };
+  }
+
+  @Post('cuentas/:cuentaId/ajustes-arqueo')
+  public async crearAjusteArqueo(
+    @Param('cuentaId') cuentaId: string,
+    @Body() dto: AjusteArqueoDto,
+  ): Promise<AjusteArqueoPublico> {
+    const ajuste = await this.cuentaDineroService.crearAjusteArqueo(cuentaId, dto.importeReal, dto.concepto);
+    return toAjusteArqueoPublico(ajuste);
+  }
+
+  @Get('ajustes-arqueo/:id')
+  public async obtenerAjusteArqueo(@Param('id') id: string): Promise<AjusteArqueoPublico> {
+    return toAjusteArqueoPublico(await this.cuentaDineroService.obtenerAjusteArqueo(id));
+  }
+
+  @Patch('ajustes-arqueo/:id')
+  public async actualizarAjusteArqueo(
+    @Param('id') id: string,
+    @Body() dto: AjusteArqueoDto,
+  ): Promise<AjusteArqueoPublico> {
+    const ajuste = await this.cuentaDineroService.actualizarAjusteArqueo(id, dto.importeReal, dto.concepto);
+    return toAjusteArqueoPublico(ajuste);
+  }
+
+  @Delete('ajustes-arqueo/:id')
+  public async eliminarAjusteArqueo(@Param('id') id: string): Promise<{ ok: true }> {
+    await this.cuentaDineroService.eliminarAjusteArqueo(id);
     return { ok: true };
   }
 
