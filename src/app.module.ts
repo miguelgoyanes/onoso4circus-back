@@ -10,6 +10,7 @@ import { TesoreriaModule } from './tesoreria/tesoreria.module';
 import { GastosModule } from './gastos/gastos.module';
 import { PersonalModule } from './personal/personal.module';
 import { StockModule } from './stock/stock.module';
+import { VentasModule } from './ventas/ventas.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { StockModule } from './stock/stock.module';
     GastosModule,
     PersonalModule,
     StockModule,
+    VentasModule,
   ],
   controllers: [AppController],
   providers: [AppService],
