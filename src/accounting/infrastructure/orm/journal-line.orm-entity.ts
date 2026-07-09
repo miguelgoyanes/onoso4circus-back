@@ -39,4 +39,7 @@ export class JournalLineOrmEntity {
 
   @Column({ type: 'varchar', name: 'empleado_id', nullable: true })
   empleadoId?: string;
+
+  @Column({ type: 'varchar', name: 'producto_id', nullable: true })
+  productoId?: string;
 }

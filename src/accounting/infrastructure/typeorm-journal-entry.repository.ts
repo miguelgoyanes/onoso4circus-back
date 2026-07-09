@@ -28,6 +28,7 @@ function toDomainLine(ormLine: JournalLineOrmEntity): JournalLine {
       paseId: ormLine.paseId ?? undefined,
       categoryTag: ormLine.categoryTag ?? undefined,
       empleadoId: ormLine.empleadoId ?? undefined,
+      productoId: ormLine.productoId ?? undefined,
     },
   });
 }
@@ -59,6 +60,7 @@ export class TypeOrmJournalEntryRepository implements JournalEntryRepository {
         ormLine.paseId = line.dimensions.paseId;
         ormLine.categoryTag = line.dimensions.categoryTag;
         ormLine.empleadoId = line.dimensions.empleadoId;
+        ormLine.productoId = line.dimensions.productoId;
         return ormLine;
       }),
     );

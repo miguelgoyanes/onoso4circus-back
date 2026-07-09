@@ -9,6 +9,7 @@ import { PlazasModule } from './plazas/plazas.module';
 import { TesoreriaModule } from './tesoreria/tesoreria.module';
 import { GastosModule } from './gastos/gastos.module';
 import { PersonalModule } from './personal/personal.module';
+import { StockModule } from './stock/stock.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { PersonalModule } from './personal/personal.module';
     TesoreriaModule,
     GastosModule,
     PersonalModule,
+    StockModule,
   ],
   controllers: [AppController],
   providers: [AppService],

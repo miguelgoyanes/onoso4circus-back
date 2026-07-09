@@ -7,6 +7,7 @@ export interface JournalLineDimensions {
   paseId?: string;
   categoryTag?: string;
   empleadoId?: string;
+  productoId?: string;
 }
 
 export class JournalLine {
