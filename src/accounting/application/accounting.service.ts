@@ -1,12 +1,13 @@
 import { randomUUID } from 'crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
-import { Account, AccountType } from '../domain/account';
+import { Account, AccountType, TipoCuentaDinero } from '../domain/account';
 import { JournalEntry } from '../domain/journal-entry';
 import { JournalLine } from '../domain/journal-line';
 import {
   EntriesByDimensionFilter,
   JOURNAL_ENTRY_REPOSITORY,
+  MovimientoCuenta,
 } from './journal-entry.repository';
 import type { JournalEntryRepository } from './journal-entry.repository';
 import { ACCOUNT_REPOSITORY } from './account.repository';
@@ -41,6 +42,9 @@ export class AccountingService {
     code: string;
     type: AccountType;
     esCuentaDeDinero: boolean;
+    tipoCuentaDinero?: TipoCuentaDinero;
+    usableEnTaquilla?: boolean;
+    usableEnBar?: boolean;
   }): Promise<Account> {
     const existente = await this.accountRepository.findByCode(params.code);
     if (existente) {
@@ -52,9 +56,21 @@ export class AccountingService {
       params.type,
       params.code,
       params.esCuentaDeDinero,
+      params.tipoCuentaDinero,
+      true,
+      params.usableEnTaquilla ?? false,
+      params.usableEnBar ?? false,
     );
     await this.accountRepository.save(account);
     return account;
+  }
+
+  public async eliminarCuenta(id: string): Promise<void> {
+    await this.accountRepository.delete(id);
+  }
+
+  public async movimientosPorCuenta(accountId: string): Promise<MovimientoCuenta[]> {
+    return this.repository.findMovimientosByAccount(accountId);
   }
 
   public async listarCuentas(): Promise<Account[]> {

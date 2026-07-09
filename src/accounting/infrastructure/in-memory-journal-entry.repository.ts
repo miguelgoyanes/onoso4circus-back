@@ -4,6 +4,7 @@ import { JournalLine } from '../domain/journal-line';
 import {
   EntriesByDimensionFilter,
   JournalEntryRepository,
+  MovimientoCuenta,
 } from '../application/journal-entry.repository';
 
 @Injectable()
@@ -35,5 +36,22 @@ export class InMemoryJournalEntryRepository implements JournalEntryRepository {
       }
     }
     return result;
+  }
+
+  public async findMovimientosByAccount(accountId: string): Promise<MovimientoCuenta[]> {
+    const result: MovimientoCuenta[] = [];
+    for (const entry of this.entries) {
+      for (const line of entry.lines) {
+        if (line.account.id !== accountId) continue;
+        result.push({
+          journalEntryId: entry.id,
+          fecha: entry.date,
+          descripcion: entry.description,
+          debit: line.debit,
+          credit: line.credit,
+        });
+      }
+    }
+    return result.sort((a, b) => b.fecha.getTime() - a.fecha.getTime());
   }
 }

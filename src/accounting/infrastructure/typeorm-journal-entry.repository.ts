@@ -2,12 +2,14 @@ import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import Decimal from 'decimal.js';
 import { Account } from '../domain/account';
 import { JournalEntry } from '../domain/journal-entry';
 import { JournalLine } from '../domain/journal-line';
 import {
   EntriesByDimensionFilter,
   JournalEntryRepository,
+  MovimientoCuenta,
 } from '../application/journal-entry.repository';
 import { AccountOrmEntity } from './orm/account.orm-entity';
 import { JournalEntryOrmEntity } from './orm/journal-entry.orm-entity';
@@ -97,6 +99,30 @@ export class TypeOrmJournalEntryRepository implements JournalEntryRepository {
 
     const entries = await qb.getMany();
     return entries.flatMap((entry) => entry.lines.map(toDomainLine));
+  }
+
+  public async findMovimientosByAccount(accountId: string): Promise<MovimientoCuenta[]> {
+    const lines = await this.journalEntryRepo
+      .createQueryBuilder('entry')
+      .innerJoin('entry.lines', 'line')
+      .where('line.account_id = :accountId', { accountId })
+      .select([
+        'entry.id AS "journalEntryId"',
+        'entry.date AS fecha',
+        'entry.description AS descripcion',
+        'line.debit AS debit',
+        'line.credit AS credit',
+      ])
+      .orderBy('entry.date', 'DESC')
+      .getRawMany<{ journalEntryId: string; fecha: Date; descripcion: string; debit: string; credit: string }>();
+
+    return lines.map((l) => ({
+      journalEntryId: l.journalEntryId,
+      fecha: l.fecha,
+      descripcion: l.descripcion,
+      debit: new Decimal(l.debit),
+      credit: new Decimal(l.credit),
+    }));
   }
 
   public async delete(id: string): Promise<void> {

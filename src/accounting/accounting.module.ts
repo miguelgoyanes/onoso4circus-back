@@ -24,6 +24,6 @@ import { JournalLineOrmEntity } from './infrastructure/orm/journal-line.orm-enti
       useClass: TypeOrmAccountRepository,
     },
   ],
-  exports: [AccountingService],
+  exports: [AccountingService, ACCOUNT_REPOSITORY],
 })
 export class AccountingModule {}

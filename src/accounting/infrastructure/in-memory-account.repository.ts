@@ -25,4 +25,8 @@ export class InMemoryAccountRepository implements AccountRepository {
   public async findCuentasDeDinero(): Promise<Account[]> {
     return [...this.accounts.values()].filter((a) => a.esCuentaDeDinero);
   }
+
+  public async delete(id: string): Promise<void> {
+    this.accounts.delete(id);
+  }
 }

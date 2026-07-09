@@ -6,7 +6,17 @@ import { AccountRepository } from '../application/account.repository';
 import { AccountOrmEntity } from './orm/account.orm-entity';
 
 function toDomain(orm: AccountOrmEntity): Account {
-  return new Account(orm.id, orm.name, orm.type, orm.code, orm.esCuentaDeDinero);
+  return new Account(
+    orm.id,
+    orm.name,
+    orm.type,
+    orm.code,
+    orm.esCuentaDeDinero,
+    orm.tipoCuentaDinero ?? undefined,
+    orm.activa,
+    orm.usableEnTaquilla,
+    orm.usableEnBar,
+  );
 }
 
 @Injectable()
@@ -23,6 +33,10 @@ export class TypeOrmAccountRepository implements AccountRepository {
       type: account.type,
       code: account.code,
       esCuentaDeDinero: account.esCuentaDeDinero,
+      tipoCuentaDinero: account.tipoCuentaDinero ?? null,
+      activa: account.activa,
+      usableEnTaquilla: account.usableEnTaquilla,
+      usableEnBar: account.usableEnBar,
     });
   }
 
@@ -47,5 +61,9 @@ export class TypeOrmAccountRepository implements AccountRepository {
       order: { code: 'ASC' },
     });
     return accounts.map(toDomain);
+  }
+
+  public async delete(id: string): Promise<void> {
+    await this.repo.delete({ id });
   }
 }
