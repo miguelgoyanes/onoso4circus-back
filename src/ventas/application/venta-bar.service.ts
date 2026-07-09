@@ -1,0 +1,288 @@
+import { randomUUID } from 'crypto';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import Decimal from 'decimal.js';
+import { VentaBar, VentaBarLinea } from '../domain/venta-bar';
+import { TipoFiscal } from '../domain/tipo-fiscal';
+import { VENTA_BAR_REPOSITORY, VentaBarFilter } from './venta-bar.repository';
+import type { VentaBarRepository } from './venta-bar.repository';
+import { ProductoService } from '../../stock/application/producto.service';
+import { PaseService } from '../../plazas/application/pase.service';
+import { FechaService } from '../../plazas/application/fecha.service';
+import { AccountingService } from '../../accounting/application/accounting.service';
+import { JournalEntry } from '../../accounting/domain/journal-entry';
+import { JournalLine, JournalLineDimensions } from '../../accounting/domain/journal-line';
+
+const CUENTA_INGRESOS_BAR = '701001';
+const CUENTA_COSTE_PRODUCTO_VENDIDO = '600001';
+const CUENTA_STOCK_BAR = '300001';
+const CUENTA_IVA_REPERCUTIDO = '477001';
+
+export interface LineaPedidoInput {
+  productoId: string;
+  cantidad: number;
+}
+
+interface AsientoPedido {
+  lines: JournalLine[];
+  total: Decimal;
+  tipoFiscal?: TipoFiscal;
+  ivaPercent?: Decimal;
+  baseImponible?: Decimal;
+  importeIva?: Decimal;
+}
+
+@Injectable()
+export class VentaBarService {
+  constructor(
+    @Inject(VENTA_BAR_REPOSITORY) private readonly repository: VentaBarRepository,
+    private readonly productoService: ProductoService,
+    private readonly paseService: PaseService,
+    private readonly fechaService: FechaService,
+    private readonly accountingService: AccountingService,
+  ) {}
+
+  // tipoFiscal/ivaPercent son opcionales — el registro rápido in situ (BarRegistrarVentaPage)
+  // nunca los manda (el IVA se gestiona después, vía reclasificarLote); el registro
+  // retroactivo en modal (BarPasePage) sí los manda directamente en el momento de crear.
+  public async crear(
+    paseId: string,
+    cuentaCobroId: string,
+    lineasInput: LineaPedidoInput[],
+    tipoFiscal?: TipoFiscal,
+    ivaPercent?: number,
+  ): Promise<VentaBar> {
+    if (!lineasInput.length) {
+      throw new BadRequestException('lineas no puede estar vacío');
+    }
+    const pase = await this.paseService.obtener(paseId);
+    const fechaEntidad = await this.fechaService.obtener(pase.fechaId);
+    const dimensiones: JournalLineDimensions = { plazaId: fechaEntidad.plazaId, fechaId: fechaEntidad.id, paseId };
+
+    const lineas = await this.snapshotearLineas(lineasInput);
+    await this.aplicarStock(lineas, -1);
+
+    const asiento = await this.construirAsiento(lineas, cuentaCobroId, tipoFiscal, ivaPercent, dimensiones);
+    const journalEntryId = randomUUID();
+    await this.accountingService.post(
+      new JournalEntry({
+        id: journalEntryId,
+        date: fechaEntidad.fecha,
+        description: `Venta de bar (${lineas.length} producto/s)`,
+        lines: asiento.lines,
+      }),
+    );
+
+    const venta = new VentaBar({
+      id: randomUUID(),
+      paseId,
+      fechaId: fechaEntidad.id,
+      plazaId: fechaEntidad.plazaId,
+      cuentaCobroId,
+      creadoEn: new Date(),
+      lineas,
+      importeTotal: asiento.total,
+      tipoFiscal: asiento.tipoFiscal,
+      ivaPercent: asiento.ivaPercent,
+      baseImponible: asiento.baseImponible,
+      importeIva: asiento.importeIva,
+      journalEntryId,
+    });
+    await this.repository.save(venta);
+    return venta;
+  }
+
+  // Corrige las líneas/cuenta de un pedido ya registrado (ej. "eran dos Coca-Colas, no
+  // una") — conserva el tipoFiscal/ivaPercent que ya tuviera el pedido (si estaba
+  // reclasificado a A, se recalcula la base sobre el importeTotal nuevo con el mismo %).
+  public async actualizar(id: string, cuentaCobroId: string, lineasInput: LineaPedidoInput[]): Promise<VentaBar> {
+    if (!lineasInput.length) {
+      throw new BadRequestException('lineas no puede estar vacío');
+    }
+    const anterior = await this.buscarOFallar(id);
+    await this.accountingService.eliminarAsiento(anterior.journalEntryId);
+    await this.aplicarStock(anterior.lineas, 1);
+
+    const pase = await this.paseService.obtener(anterior.paseId);
+    const fechaEntidad = await this.fechaService.obtener(pase.fechaId);
+    const dimensiones: JournalLineDimensions = {
+      plazaId: fechaEntidad.plazaId,
+      fechaId: fechaEntidad.id,
+      paseId: anterior.paseId,
+    };
+
+    const lineas = await this.snapshotearLineas(lineasInput);
+    await this.aplicarStock(lineas, -1);
+
+    const asiento = await this.construirAsiento(
+      lineas,
+      cuentaCobroId,
+      anterior.tipoFiscal,
+      anterior.ivaPercent?.toNumber(),
+      dimensiones,
+    );
+    const journalEntryId = randomUUID();
+    await this.accountingService.post(
+      new JournalEntry({
+        id: journalEntryId,
+        date: fechaEntidad.fecha,
+        description: `Venta de bar (${lineas.length} producto/s)`,
+        lines: asiento.lines,
+      }),
+    );
+
+    const actualizada = anterior.actualizada({
+      cuentaCobroId,
+      lineas,
+      importeTotal: asiento.total,
+      tipoFiscal: asiento.tipoFiscal,
+      ivaPercent: asiento.ivaPercent,
+      baseImponible: asiento.baseImponible,
+      importeIva: asiento.importeIva,
+      journalEntryId,
+    });
+    await this.repository.save(actualizada);
+    return actualizada;
+  }
+
+  // Nunca toca el stock ni las líneas — solo revierte y reaplica el asiento preservando
+  // importeTotal, igual que VentaEntradasService.reclasificarLote.
+  public async reclasificarLote(ids: string[], tipoFiscal: TipoFiscal, ivaPercent?: number): Promise<VentaBar[]> {
+    const resultado: VentaBar[] = [];
+    for (const id of ids) {
+      const venta = await this.buscarOFallar(id);
+      await this.accountingService.eliminarAsiento(venta.journalEntryId);
+
+      const pase = await this.paseService.obtener(venta.paseId);
+      const fechaEntidad = await this.fechaService.obtener(pase.fechaId);
+      const dimensiones: JournalLineDimensions = {
+        plazaId: fechaEntidad.plazaId,
+        fechaId: fechaEntidad.id,
+        paseId: venta.paseId,
+      };
+
+      const asiento = await this.construirAsiento(venta.lineas, venta.cuentaCobroId, tipoFiscal, ivaPercent, dimensiones);
+      const journalEntryId = randomUUID();
+      await this.accountingService.post(
+        new JournalEntry({
+          id: journalEntryId,
+          date: fechaEntidad.fecha,
+          description: `Venta de bar (${venta.lineas.length} producto/s)`,
+          lines: asiento.lines,
+        }),
+      );
+
+      const actualizada = venta.actualizada({
+        cuentaCobroId: venta.cuentaCobroId,
+        lineas: venta.lineas,
+        importeTotal: asiento.total,
+        tipoFiscal: asiento.tipoFiscal,
+        ivaPercent: asiento.ivaPercent,
+        baseImponible: asiento.baseImponible,
+        importeIva: asiento.importeIva,
+        journalEntryId,
+      });
+      await this.repository.save(actualizada);
+      resultado.push(actualizada);
+    }
+    return resultado;
+  }
+
+  public async eliminar(id: string): Promise<void> {
+    const venta = await this.buscarOFallar(id);
+    await this.accountingService.eliminarAsiento(venta.journalEntryId);
+    await this.aplicarStock(venta.lineas, 1);
+    await this.repository.delete(id);
+  }
+
+  public async listar(filter?: VentaBarFilter): Promise<VentaBar[]> {
+    return this.repository.findAll(filter);
+  }
+
+  public async obtener(id: string): Promise<VentaBar> {
+    return this.buscarOFallar(id);
+  }
+
+  private async snapshotearLineas(lineasInput: LineaPedidoInput[]): Promise<VentaBarLinea[]> {
+    const lineas: VentaBarLinea[] = [];
+    for (const l of lineasInput) {
+      if (l.cantidad <= 0) {
+        throw new BadRequestException('cantidad debe ser mayor que 0');
+      }
+      const producto = await this.productoService.obtener(l.productoId);
+      lineas.push(new VentaBarLinea(l.productoId, l.cantidad, producto.precioVentaPublico, producto.costeUnitarioActual));
+    }
+    return lineas;
+  }
+
+  // signo -1 al vender (consume stock), +1 al revertir una venta editada o eliminada
+  // (repone). Deja el coste medio ponderado intacto — una venta nunca lo altera.
+  private async aplicarStock(lineas: VentaBarLinea[], signo: 1 | -1): Promise<void> {
+    for (const l of lineas) {
+      await this.productoService.ajustarCantidadPorVenta(l.productoId, signo * l.cantidad);
+    }
+  }
+
+  private async construirAsiento(
+    lineas: VentaBarLinea[],
+    cuentaCobroId: string,
+    tipoFiscal: TipoFiscal | undefined,
+    ivaPercent: number | undefined,
+    dimensionesBase: JournalLineDimensions,
+  ): Promise<AsientoPedido> {
+    const cuentaCoste = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_COSTE_PRODUCTO_VENDIDO);
+    const cuentaStock = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_STOCK_BAR);
+    const cuentaIngresos = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_INGRESOS_BAR);
+    const cuentaCobro = await this.accountingService.obtenerCuentaPorId(cuentaCobroId);
+
+    const lines: JournalLine[] = [];
+    let total = new Decimal(0);
+    for (const linea of lineas) {
+      const dimensionesLinea: JournalLineDimensions = { ...dimensionesBase, productoId: linea.productoId };
+      const subtotalPrecio = linea.precioUnitarioAplicado.times(linea.cantidad).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      const subtotalCoste = linea.costeUnitarioAplicado.times(linea.cantidad).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      total = total.plus(subtotalPrecio);
+      // Si el producto todavía no tiene coste medio establecido (nunca ha entrado stock por
+      // recepción), no hay nada que asentar como coste — JournalLine rechaza una línea con
+      // debit y credit a cero. No bloquea la venta, solo omite el par de coste.
+      if (!subtotalCoste.isZero()) {
+        lines.push(new JournalLine({ account: cuentaCoste, debit: subtotalCoste, dimensions: dimensionesLinea }));
+        lines.push(new JournalLine({ account: cuentaStock, credit: subtotalCoste, dimensions: dimensionesLinea }));
+      }
+    }
+
+    let resto: Pick<AsientoPedido, 'tipoFiscal' | 'ivaPercent' | 'baseImponible' | 'importeIva'>;
+    if (tipoFiscal === TipoFiscal.A) {
+      if (ivaPercent == null) {
+        throw new BadRequestException('ivaPercent es obligatorio cuando tipoFiscal = A');
+      }
+      const ivaPercentDec = new Decimal(ivaPercent);
+      const baseImponible = total
+        .dividedBy(new Decimal(1).plus(ivaPercentDec.dividedBy(100)))
+        .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      // Complemento exacto, no base×%, para garantizar base + iva === total céntimo a
+      // céntimo (mismo criterio que VentaEntradasService).
+      const importeIva = total.minus(baseImponible);
+      lines.push(new JournalLine({ account: cuentaIngresos, credit: baseImponible, dimensions: dimensionesBase }));
+      const cuentaIva = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_IVA_REPERCUTIDO);
+      lines.push(new JournalLine({ account: cuentaIva, credit: importeIva, dimensions: dimensionesBase }));
+      resto = { tipoFiscal: TipoFiscal.A, ivaPercent: ivaPercentDec, baseImponible, importeIva };
+    } else {
+      lines.push(new JournalLine({ account: cuentaIngresos, credit: total, dimensions: dimensionesBase }));
+      resto =
+        tipoFiscal === TipoFiscal.B
+          ? { tipoFiscal: TipoFiscal.B, ivaPercent: new Decimal(0), baseImponible: total, importeIva: new Decimal(0) }
+          : {};
+    }
+
+    lines.push(new JournalLine({ account: cuentaCobro, debit: total, dimensions: dimensionesBase }));
+    return { lines, total, ...resto };
+  }
+
+  private async buscarOFallar(id: string): Promise<VentaBar> {
+    const venta = await this.repository.findById(id);
+    if (!venta) {
+      throw new NotFoundException('Venta de bar no encontrada');
+    }
+    return venta;
+  }
+}

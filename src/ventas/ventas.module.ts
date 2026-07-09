@@ -15,26 +15,35 @@ import { VENTA_ENTRADAS_REPOSITORY } from './application/venta-entradas.reposito
 import { TypeOrmVentaEntradasRepository } from './infrastructure/typeorm-venta-entradas.repository';
 import { VentaEntradasOrmEntity } from './infrastructure/orm/venta-entradas.orm-entity';
 import { VentasEntradasController } from './api/ventas-entradas.controller';
+import { VentaBarService } from './application/venta-bar.service';
+import { VENTA_BAR_REPOSITORY } from './application/venta-bar.repository';
+import { TypeOrmVentaBarRepository } from './infrastructure/typeorm-venta-bar.repository';
+import { VentaBarOrmEntity } from './infrastructure/orm/venta-bar.orm-entity';
+import { VentasBarController } from './api/ventas-bar.controller';
 import { VentasSeedService } from './ventas-seed.service';
 import { AccountingModule } from '../accounting/accounting.module';
 import { PlazasModule } from '../plazas/plazas.module';
+import { StockModule } from '../stock/stock.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ContratoIngresoOrmEntity, TipoEntradaOrmEntity, VentaEntradasOrmEntity]),
+    TypeOrmModule.forFeature([ContratoIngresoOrmEntity, TipoEntradaOrmEntity, VentaEntradasOrmEntity, VentaBarOrmEntity]),
     AccountingModule,
     PlazasModule,
+    StockModule,
   ],
-  controllers: [ContratosIngresoController, TiposEntradaController, VentasEntradasController],
+  controllers: [ContratosIngresoController, TiposEntradaController, VentasEntradasController, VentasBarController],
   providers: [
     ContratoIngresoService,
     TipoEntradaService,
     VentaEntradasService,
+    VentaBarService,
     VentasSeedService,
     { provide: CONTRATO_INGRESO_REPOSITORY, useClass: TypeOrmContratoIngresoRepository },
     { provide: TIPO_ENTRADA_REPOSITORY, useClass: TypeOrmTipoEntradaRepository },
     { provide: VENTA_ENTRADAS_REPOSITORY, useClass: TypeOrmVentaEntradasRepository },
+    { provide: VENTA_BAR_REPOSITORY, useClass: TypeOrmVentaBarRepository },
   ],
-  exports: [ContratoIngresoService, TipoEntradaService, VentaEntradasService],
+  exports: [ContratoIngresoService, TipoEntradaService, VentaEntradasService, VentaBarService],
 })
 export class VentasModule {}

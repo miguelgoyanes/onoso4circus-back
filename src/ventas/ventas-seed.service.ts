@@ -9,15 +9,17 @@ interface DefinicionCuenta {
   esCuentaDeDinero?: boolean;
 }
 
-// Cuentas de Contratos (Fase 1) + Taquilla (Fase 2). Bar añadirá 701001 cuando se construya.
-// La cuenta de cobro de cada venta de Taquilla la elige Brandon libremente entre sus cuentas
-// de dinero ya creadas en Tesorería (cuentaCobroId) — no hay cuentas de caja/banco fijas que
-// sembrar aquí, a diferencia del diseño original de la Fase 2.
+// Cuentas de Contratos (Fase 1) + Taquilla (Fase 2) + Bar (Fase 3). La cuenta de cobro de
+// cada venta la elige Brandon libremente entre sus cuentas de dinero ya creadas en Tesorería
+// (cuentaCobroId) — no hay cuentas de caja/banco fijas que sembrar aquí.
+// 300001 (Stock bar) y 606001 (Consumo interno/mermas) ya las siembra StockSeedService.
 const CUENTAS: DefinicionCuenta[] = [
   { code: '702001', nombre: 'Ingresos por contrato', type: AccountType.INCOME },
   { code: '430001', nombre: 'Clientes / Pendiente de cobro', type: AccountType.ASSET },
   { code: '477001', nombre: 'Hacienda Pública, IVA repercutido', type: AccountType.LIABILITY },
   { code: '700001', nombre: 'Ingresos taquilla', type: AccountType.INCOME },
+  { code: '701001', nombre: 'Ingresos bar', type: AccountType.INCOME },
+  { code: '600001', nombre: 'Coste de producto vendido — bar', type: AccountType.EXPENSE },
 ];
 
 /** Siembra idempotente de las cuentas contables fijas que necesita Ventas (sección 5/6 del

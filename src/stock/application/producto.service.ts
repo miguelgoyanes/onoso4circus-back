@@ -49,6 +49,17 @@ export class ProductoService {
     return actualizado;
   }
 
+  // Usado por VentaBarService (Ventas/Bar): descuenta o repone stock por una venta, sin
+  // pasar por recalcularDesdeHistorial — una venta de bar no es una RecepcionStock ni un
+  // AjusteStock, y no debe alterar el coste medio ponderado (solo consume al coste ya
+  // vigente, que VentaBarService ya snapshotea en cada línea antes de llamar aquí).
+  public async ajustarCantidadPorVenta(id: string, delta: number): Promise<Producto> {
+    const producto = await this.buscarOFallar(id);
+    const actualizado = producto.conCantidadYCoste(producto.cantidadActual + delta, producto.costeUnitarioActual);
+    await this.repository.save(actualizado);
+    return actualizado;
+  }
+
   public async actualizarImagen(id: string, imagenUrl: string): Promise<Producto> {
     const producto = await this.buscarOFallar(id);
     const actualizado = producto.conImagen(imagenUrl);

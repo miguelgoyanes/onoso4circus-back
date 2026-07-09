@@ -1,0 +1,31 @@
+import { Injectable } from '@nestjs/common';
+import { VentaBar } from '../domain/venta-bar';
+import { VentaBarFilter, VentaBarRepository } from '../application/venta-bar.repository';
+
+@Injectable()
+export class InMemoryVentaBarRepository implements VentaBarRepository {
+  private readonly ventas = new Map<string, VentaBar>();
+
+  public async save(venta: VentaBar): Promise<void> {
+    this.ventas.set(venta.id, venta);
+  }
+
+  public async findById(id: string): Promise<VentaBar | null> {
+    return this.ventas.get(id) ?? null;
+  }
+
+  public async findAll(filter?: VentaBarFilter): Promise<VentaBar[]> {
+    return [...this.ventas.values()]
+      .filter((v) => {
+        if (filter?.paseId && v.paseId !== filter.paseId) return false;
+        if (filter?.fechaId && v.fechaId !== filter.fechaId) return false;
+        if (filter?.plazaId && v.plazaId !== filter.plazaId) return false;
+        return true;
+      })
+      .sort((a, b) => b.creadoEn.getTime() - a.creadoEn.getTime());
+  }
+
+  public async delete(id: string): Promise<void> {
+    this.ventas.delete(id);
+  }
+}
