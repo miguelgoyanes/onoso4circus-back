@@ -27,6 +27,9 @@ export class VentaEntradas {
   public readonly baseImponible?: Decimal;
   public readonly importeIva?: Decimal;
   public readonly journalEntryId: string;
+  // Timestamp de creación, invisible en la UI — solo sirve para listar las ventas de un pase
+  // del más reciente al más antiguo, igual que VentaBar.creadoEn.
+  public readonly creadoEn: Date;
 
   constructor(params: {
     id: string;
@@ -45,6 +48,7 @@ export class VentaEntradas {
     baseImponible?: Decimal;
     importeIva?: Decimal;
     journalEntryId: string;
+    creadoEn: Date;
   }) {
     this.id = params.id;
     this.paseId = params.paseId;
@@ -62,6 +66,7 @@ export class VentaEntradas {
     this.baseImponible = params.baseImponible;
     this.importeIva = params.importeIva;
     this.journalEntryId = params.journalEntryId;
+    this.creadoEn = params.creadoEn;
   }
 
   // paseId/fechaId/plazaId no se tocan aquí — si hay que mover una venta de pase, se elimina

@@ -15,12 +15,14 @@ export class InMemoryVentaEntradasRepository implements VentaEntradasRepository 
   }
 
   public async findAll(filter?: VentaEntradasFilter): Promise<VentaEntradas[]> {
-    return [...this.ventas.values()].filter((v) => {
-      if (filter?.paseId && v.paseId !== filter.paseId) return false;
-      if (filter?.fechaId && v.fechaId !== filter.fechaId) return false;
-      if (filter?.plazaId && v.plazaId !== filter.plazaId) return false;
-      return true;
-    });
+    return [...this.ventas.values()]
+      .filter((v) => {
+        if (filter?.paseId && v.paseId !== filter.paseId) return false;
+        if (filter?.fechaId && v.fechaId !== filter.fechaId) return false;
+        if (filter?.plazaId && v.plazaId !== filter.plazaId) return false;
+        return true;
+      })
+      .sort((a, b) => b.creadoEn.getTime() - a.creadoEn.getTime());
   }
 
   public async existeConTipoEntrada(tipoEntradaId: string): Promise<boolean> {

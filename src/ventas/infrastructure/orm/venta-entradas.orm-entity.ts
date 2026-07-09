@@ -81,4 +81,9 @@ export class VentaEntradasOrmEntity {
 
   @Column({ type: 'varchar', name: 'journal_entry_id' })
   journalEntryId: string;
+
+  // Default a nivel de BD (no solo en código) para que altere en caliente sin romper filas ya
+  // existentes al añadir esta columna — mismo motivo que en VentaBarOrmEntity.creadoEn.
+  @Column({ type: 'timestamptz', name: 'creado_en', default: () => 'now()' })
+  creadoEn: Date;
 }

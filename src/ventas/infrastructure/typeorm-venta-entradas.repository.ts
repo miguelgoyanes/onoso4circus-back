@@ -23,6 +23,7 @@ function toDomain(orm: VentaEntradasOrmEntity): VentaEntradas {
     baseImponible: orm.baseImponible ?? undefined,
     importeIva: orm.importeIva ?? undefined,
     journalEntryId: orm.journalEntryId,
+    creadoEn: orm.creadoEn,
   });
 }
 
@@ -51,6 +52,7 @@ export class TypeOrmVentaEntradasRepository implements VentaEntradasRepository {
       baseImponible: venta.baseImponible ?? null,
       importeIva: venta.importeIva ?? null,
       journalEntryId: venta.journalEntryId,
+      creadoEn: venta.creadoEn,
     });
   }
 
@@ -66,7 +68,7 @@ export class TypeOrmVentaEntradasRepository implements VentaEntradasRepository {
         ...(filter?.fechaId ? { fechaId: filter.fechaId } : {}),
         ...(filter?.plazaId ? { plazaId: filter.plazaId } : {}),
       },
-      order: { id: 'ASC' },
+      order: { creadoEn: 'DESC' },
     });
     return ventas.map(toDomain);
   }

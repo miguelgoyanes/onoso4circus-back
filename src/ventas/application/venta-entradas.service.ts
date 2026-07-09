@@ -91,6 +91,7 @@ export class VentaEntradasService {
         baseImponible: asiento.baseImponible,
         importeIva: asiento.importeIva,
         journalEntryId,
+        creadoEn: new Date(),
       });
       await this.repository.save(venta);
       ventas.push(venta);

@@ -48,6 +48,7 @@ describe('TipoEntradaService', () => {
         cuentaCobroId: 'cuenta1',
         origen: OrigenVenta.FISICA,
         journalEntryId: 'je1',
+        creadoEn: new Date(),
       }),
     );
 

@@ -132,6 +132,26 @@ describe('VentaEntradasService', () => {
     expect((await accountingService.saldoPorCuenta(cuentaCobroId)).equals(new Decimal(50))).toBe(true);
   });
 
+  it('listar devuelve las ventas del más reciente al más antiguo', async () => {
+    const general = await tipoEntradaService.crear('General', new Decimal(10), false);
+
+    const [primera] = await service.crearLote(paseId, [
+      { tipoEntradaId: general.id, cantidad: 1, cuentaCobroId, origen: OrigenVenta.FISICA },
+    ]);
+    // Separación real de reloj para no empatar creadoEn dentro del mismo milisegundo — en
+    // producción esto nunca ocurre entre dos registros reales (implica dos confirmaciones
+    // humanas simultáneas), solo hace falta forzarlo aquí porque el repo in-memory no tiene
+    // la latencia real de una escritura a Postgres.
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const [segunda] = await service.crearLote(paseId, [
+      { tipoEntradaId: general.id, cantidad: 1, cuentaCobroId, origen: OrigenVenta.FISICA },
+    ]);
+
+    const ventas = await service.listar({ paseId });
+
+    expect(ventas.map((v) => v.id)).toEqual([segunda.id, primera.id]);
+  });
+
   it('el total nunca depende de la clasificación fiscal: 10 entradas a 15€ son siempre 150€', async () => {
     const general = await tipoEntradaService.crear('General', new Decimal(15), true);
 
