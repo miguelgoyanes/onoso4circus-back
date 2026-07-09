@@ -11,6 +11,7 @@ import { GastosModule } from './gastos/gastos.module';
 import { PersonalModule } from './personal/personal.module';
 import { StockModule } from './stock/stock.module';
 import { VentasModule } from './ventas/ventas.module';
+import { ActivosModule } from './activos/activos.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { VentasModule } from './ventas/ventas.module';
     PersonalModule,
     StockModule,
     VentasModule,
+    ActivosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
