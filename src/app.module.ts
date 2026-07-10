@@ -14,6 +14,7 @@ import { VentasModule } from './ventas/ventas.module';
 import { ActivosModule } from './activos/activos.module';
 import { AnalisisModule } from './analisis/analisis.module';
 import { ContabilidadModule } from './contabilidad/contabilidad.module';
+import { PlazasWebModule } from './plazas-web/plazas-web.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ContabilidadModule } from './contabilidad/contabilidad.module';
     ActivosModule,
     AnalisisModule,
     ContabilidadModule,
+    PlazasWebModule,
   ],
   controllers: [AppController],
   providers: [AppService],
