@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { AnalisisService } from '../application/analisis.service';
+import { finDeDia } from '../../accounting/domain/journal-entry';
 import { Rol } from '../../auth/domain/usuario';
 import { JwtAuthGuard } from '../../auth/api/jwt-auth.guard';
 import { RolesGuard } from '../../auth/api/roles.guard';
@@ -26,7 +27,7 @@ export class AnalisisController {
 
   @Get('resumen')
   public async resumen(@Query() query: RangoFechasRequeridoQueryDto): Promise<ResumenGeneralPublico> {
-    const resumen = await this.analisisService.resumenGeneral(new Date(query.desde), new Date(query.hasta));
+    const resumen = await this.analisisService.resumenGeneral(new Date(query.desde), finDeDia(query.hasta));
     return toResumenGeneralPublico(resumen);
   }
 
@@ -34,7 +35,7 @@ export class AnalisisController {
   public async plazas(@Query() query: RangoFechasQueryDto): Promise<ResumenPlazaPublico[]> {
     const resultados = await this.analisisService.porPlaza(
       query.desde ? new Date(query.desde) : undefined,
-      query.hasta ? new Date(query.hasta) : undefined,
+      query.hasta ? finDeDia(query.hasta) : undefined,
     );
     return resultados.map(toResumenPlazaPublico);
   }
@@ -44,7 +45,7 @@ export class AnalisisController {
     const detalle = await this.analisisService.detallePlaza(
       id,
       query.desde ? new Date(query.desde) : undefined,
-      query.hasta ? new Date(query.hasta) : undefined,
+      query.hasta ? finDeDia(query.hasta) : undefined,
     );
     return toDetallePlazaPublico(detalle);
   }
@@ -57,7 +58,7 @@ export class AnalisisController {
 
   @Get('flujo-caja')
   public async flujoCaja(@Query() query: RangoFechasRequeridoQueryDto): Promise<PuntoFlujoCajaPublico[]> {
-    const puntos = await this.analisisService.flujoCaja(new Date(query.desde), new Date(query.hasta));
+    const puntos = await this.analisisService.flujoCaja(new Date(query.desde), finDeDia(query.hasta));
     return puntos.map(toPuntoFlujoCajaPublico);
   }
 }

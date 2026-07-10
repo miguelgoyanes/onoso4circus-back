@@ -8,6 +8,7 @@ import { JournalEntry } from '../domain/journal-entry';
 import { JournalLine } from '../domain/journal-line';
 import {
   EntriesByDimensionFilter,
+  EntriesByFilter,
   JournalEntryRepository,
   MovimientoCuenta,
 } from '../application/journal-entry.repository';
@@ -17,6 +18,15 @@ import { JournalLineOrmEntity } from './orm/journal-line.orm-entity';
 
 function toDomainAccount(ormAccount: AccountOrmEntity): Account {
   return new Account(ormAccount.id, ormAccount.name, ormAccount.type, ormAccount.code);
+}
+
+function toDomainEntry(ormEntry: JournalEntryOrmEntity): JournalEntry {
+  return new JournalEntry({
+    id: ormEntry.id,
+    date: ormEntry.date,
+    description: ormEntry.description,
+    lines: ormEntry.lines.map(toDomainLine),
+  });
 }
 
 function toDomainLine(ormLine: JournalLineOrmEntity): JournalLine {
@@ -114,6 +124,7 @@ export class TypeOrmJournalEntryRepository implements JournalEntryRepository {
         'line.credit AS credit',
       ])
       .orderBy('entry.date', 'DESC')
+      .addOrderBy('entry.createdAt', 'DESC')
       .getRawMany<{ journalEntryId: string; fecha: Date; descripcion: string; debit: string; credit: string }>();
 
     return lines.map((l) => ({
@@ -123,6 +134,79 @@ export class TypeOrmJournalEntryRepository implements JournalEntryRepository {
       debit: new Decimal(l.debit),
       credit: new Decimal(l.credit),
     }));
+  }
+
+  public async findMovimientosByAccountEnRango(
+    accountId: string,
+    fechaDesde?: Date,
+    fechaHasta?: Date,
+  ): Promise<MovimientoCuenta[]> {
+    const qb = this.journalEntryRepo
+      .createQueryBuilder('entry')
+      .innerJoin('entry.lines', 'line')
+      .where('line.account_id = :accountId', { accountId })
+      .select([
+        'entry.id AS "journalEntryId"',
+        'entry.date AS fecha',
+        'entry.description AS descripcion',
+        'line.debit AS debit',
+        'line.credit AS credit',
+      ])
+      .orderBy('entry.date', 'ASC')
+      .addOrderBy('entry.createdAt', 'ASC');
+
+    if (fechaDesde) {
+      qb.andWhere('entry.date >= :fechaDesde', { fechaDesde });
+    }
+    if (fechaHasta) {
+      qb.andWhere('entry.date <= :fechaHasta', { fechaHasta });
+    }
+
+    const lines = await qb.getRawMany<{
+      journalEntryId: string;
+      fecha: Date;
+      descripcion: string;
+      debit: string;
+      credit: string;
+    }>();
+
+    return lines.map((l) => ({
+      journalEntryId: l.journalEntryId,
+      fecha: l.fecha,
+      descripcion: l.descripcion,
+      debit: new Decimal(l.debit),
+      credit: new Decimal(l.credit),
+    }));
+  }
+
+  public async findEntriesByFilter(filter: EntriesByFilter): Promise<JournalEntry[]> {
+    const idsQb = this.journalEntryRepo.createQueryBuilder('entry').select('entry.id', 'id').distinct(true);
+
+    if (filter.accountIds && filter.accountIds.length > 0) {
+      idsQb.innerJoin('entry.lines', 'line', 'line.account_id IN (:...accountIds)', {
+        accountIds: filter.accountIds,
+      });
+    }
+    if (filter.fechaDesde) {
+      idsQb.andWhere('entry.date >= :fechaDesde', { fechaDesde: filter.fechaDesde });
+    }
+    if (filter.fechaHasta) {
+      idsQb.andWhere('entry.date <= :fechaHasta', { fechaHasta: filter.fechaHasta });
+    }
+
+    const ids = (await idsQb.getRawMany<{ id: string }>()).map((r) => r.id);
+    if (ids.length === 0) return [];
+
+    const entries = await this.journalEntryRepo
+      .createQueryBuilder('entry')
+      .leftJoinAndSelect('entry.lines', 'line')
+      .leftJoinAndSelect('line.account', 'account')
+      .where('entry.id IN (:...ids)', { ids })
+      .orderBy('entry.date', 'ASC')
+      .addOrderBy('entry.createdAt', 'ASC')
+      .getMany();
+
+    return entries.map(toDomainEntry);
   }
 
   public async delete(id: string): Promise<void> {

@@ -13,7 +13,7 @@ import { PaseService } from '../../plazas/application/pase.service';
 import { EmpleadoService } from '../../personal/application/empleado.service';
 import { RegimenEmpleado } from '../../personal/domain/regimen-empleado';
 import { AccountingService } from '../../accounting/application/accounting.service';
-import { JournalEntry } from '../../accounting/domain/journal-entry';
+import { fechaContableDeHoy, JournalEntry } from '../../accounting/domain/journal-entry';
 import { JournalLine, JournalLineDimensions } from '../../accounting/domain/journal-line';
 
 const CUENTA_PERSONAL_CON_PLAZA = '640001';
@@ -260,7 +260,7 @@ export class GastoService {
     await this.accountingService.post(
       new JournalEntry({
         id: journalEntryId,
-        date: new Date(),
+        date: fechaContableDeHoy(),
         description: `Pago de gasto pendiente: ${gasto.descripcion}`,
         lines: [
           new JournalLine({ account: cuentaProveedores, debit: gasto.importe, dimensions: dimensiones }),

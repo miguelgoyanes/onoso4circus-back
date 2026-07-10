@@ -70,4 +70,9 @@ export class Account {
       this.usableEnBar,
     );
   }
+
+  // ASSET/EXPENSE aumentan su saldo por el debe; LIABILITY/EQUITY/INCOME por el haber.
+  public esDebitoNormal(): boolean {
+    return this.type === AccountType.ASSET || this.type === AccountType.EXPENSE;
+  }
 }

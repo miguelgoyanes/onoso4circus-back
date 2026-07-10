@@ -10,7 +10,7 @@ import { PlazaService } from '../../plazas/application/plaza.service';
 import { FechaService } from '../../plazas/application/fecha.service';
 import { PaseService } from '../../plazas/application/pase.service';
 import { AccountingService } from '../../accounting/application/accounting.service';
-import { JournalEntry } from '../../accounting/domain/journal-entry';
+import { fechaContableDeHoy, JournalEntry } from '../../accounting/domain/journal-entry';
 import { JournalLine, JournalLineDimensions } from '../../accounting/domain/journal-line';
 
 const CUENTA_INGRESOS_CONTRATO = '702001';
@@ -180,7 +180,7 @@ export class ContratoIngresoService {
     await this.accountingService.post(
       new JournalEntry({
         id: journalEntryId,
-        date: new Date(),
+        date: fechaContableDeHoy(),
         description: `Cobro de contrato pendiente: ${contrato.cliente}`,
         lines: [
           new JournalLine({ account: cuentaDestino, debit: contrato.importe, dimensions: dimensiones }),

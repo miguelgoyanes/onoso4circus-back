@@ -6,6 +6,7 @@ import { JournalEntry } from '../domain/journal-entry';
 import { JournalLine } from '../domain/journal-line';
 import {
   EntriesByDimensionFilter,
+  EntriesByFilter,
   JOURNAL_ENTRY_REPOSITORY,
   MovimientoCuenta,
 } from './journal-entry.repository';
@@ -73,6 +74,21 @@ export class AccountingService {
     return this.repository.findMovimientosByAccount(accountId);
   }
 
+  // Para Libro mayor: a diferencia de movimientosPorCuenta (todo el histórico, orden DESC,
+  // usado por Tesorería), esta admite rango de fechas y devuelve orden ASC.
+  public async movimientosPorCuentaEnRango(
+    accountId: string,
+    fechaDesde?: Date,
+    fechaHasta?: Date,
+  ): Promise<MovimientoCuenta[]> {
+    return this.repository.findMovimientosByAccountEnRango(accountId, fechaDesde, fechaHasta);
+  }
+
+  // Para Libro diario: asientos completos (con todas sus líneas) filtrados por cuentas y/o fechas.
+  public async listarAsientos(filter: EntriesByFilter): Promise<JournalEntry[]> {
+    return this.repository.findEntriesByFilter(filter);
+  }
+
   public async listarCuentas(): Promise<Account[]> {
     return this.accountRepository.findAll();
   }
@@ -103,8 +119,7 @@ export class AccountingService {
     const totalCredit = lines.reduce((sum, line) => sum.plus(line.credit), new Decimal(0));
 
     const account = lines[0]?.account ?? (await this.accountRepository.findById(accountId));
-    const aumentaConDebito =
-      !account || account.type === AccountType.ASSET || account.type === AccountType.EXPENSE;
+    const aumentaConDebito = !account || account.esDebitoNormal();
 
     return aumentaConDebito ? totalDebit.minus(totalCredit) : totalCredit.minus(totalDebit);
   }

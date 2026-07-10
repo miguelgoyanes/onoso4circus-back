@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { Account, AccountType, TipoCuentaDinero } from '../../accounting/domain/account';
-import { JournalEntry } from '../../accounting/domain/journal-entry';
+import { fechaContableDeHoy, JournalEntry } from '../../accounting/domain/journal-entry';
 import { JournalLine } from '../../accounting/domain/journal-line';
 import { MovimientoCuenta } from '../../accounting/application/journal-entry.repository';
 import { AccountingService } from '../../accounting/application/accounting.service';
@@ -201,7 +201,7 @@ export class CuentaDineroService {
     await this.accountingService.post(
       new JournalEntry({
         id: journalEntryId,
-        date: new Date(),
+        date: fechaContableDeHoy(),
         description: descripcion,
         lines: [new JournalLine({ account: destino, debit: monto }), new JournalLine({ account: origen, credit: monto })],
       }),
@@ -274,7 +274,7 @@ export class CuentaDineroService {
         ? [new JournalLine({ account: cuenta, debit: monto }), new JournalLine({ account: capital, credit: monto })]
         : [new JournalLine({ account: capital, debit: monto }), new JournalLine({ account: cuenta, credit: monto })];
     await this.accountingService.post(
-      new JournalEntry({ id: journalEntryId, date: new Date(), description: descripcion, lines }),
+      new JournalEntry({ id: journalEntryId, date: fechaContableDeHoy(), description: descripcion, lines }),
     );
   }
 
@@ -354,7 +354,7 @@ export class CuentaDineroService {
     await this.accountingService.post(
       new JournalEntry({
         id: journalEntryId,
-        date: new Date(),
+        date: fechaContableDeHoy(),
         description: `Ajuste de arqueo: ${cuenta.name}`,
         lines,
       }),

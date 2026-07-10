@@ -13,6 +13,7 @@ import { StockModule } from './stock/stock.module';
 import { VentasModule } from './ventas/ventas.module';
 import { ActivosModule } from './activos/activos.module';
 import { AnalisisModule } from './analisis/analisis.module';
+import { ContabilidadModule } from './contabilidad/contabilidad.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { AnalisisModule } from './analisis/analisis.module';
     VentasModule,
     ActivosModule,
     AnalisisModule,
+    ContabilidadModule,
   ],
   controllers: [AppController],
   providers: [AppService],

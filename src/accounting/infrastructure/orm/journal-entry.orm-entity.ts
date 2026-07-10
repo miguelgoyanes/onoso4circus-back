@@ -1,4 +1,4 @@
-import { Column, Entity, OneToMany, PrimaryColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, OneToMany, PrimaryColumn } from 'typeorm';
 import { JournalLineOrmEntity } from './journal-line.orm-entity';
 
 @Entity('journal_entries')
@@ -11,6 +11,11 @@ export class JournalEntryOrmEntity {
 
   @Column({ type: 'varchar' })
   description: string;
+
+  // Desempate para ordenar asientos del mismo día por orden real de creación — id es un
+  // UUID aleatorio, no sirve para ordenar cronológicamente.
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
 
   @OneToMany(() => JournalLineOrmEntity, (line) => line.journalEntry, {
     cascade: true,

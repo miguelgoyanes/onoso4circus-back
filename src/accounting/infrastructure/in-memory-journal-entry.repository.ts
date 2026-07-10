@@ -3,6 +3,7 @@ import { JournalEntry } from '../domain/journal-entry';
 import { JournalLine } from '../domain/journal-line';
 import {
   EntriesByDimensionFilter,
+  EntriesByFilter,
   JournalEntryRepository,
   MovimientoCuenta,
 } from '../application/journal-entry.repository';
@@ -53,5 +54,41 @@ export class InMemoryJournalEntryRepository implements JournalEntryRepository {
       }
     }
     return result.sort((a, b) => b.fecha.getTime() - a.fecha.getTime());
+  }
+
+  public async findMovimientosByAccountEnRango(
+    accountId: string,
+    fechaDesde?: Date,
+    fechaHasta?: Date,
+  ): Promise<MovimientoCuenta[]> {
+    const result: MovimientoCuenta[] = [];
+    for (const entry of this.entries) {
+      if (fechaDesde && entry.date < fechaDesde) continue;
+      if (fechaHasta && entry.date > fechaHasta) continue;
+      for (const line of entry.lines) {
+        if (line.account.id !== accountId) continue;
+        result.push({
+          journalEntryId: entry.id,
+          fecha: entry.date,
+          descripcion: entry.description,
+          debit: line.debit,
+          credit: line.credit,
+        });
+      }
+    }
+    return result.sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
+  }
+
+  public async findEntriesByFilter(filter: EntriesByFilter): Promise<JournalEntry[]> {
+    return this.entries
+      .filter((entry) => {
+        if (filter.fechaDesde && entry.date < filter.fechaDesde) return false;
+        if (filter.fechaHasta && entry.date > filter.fechaHasta) return false;
+        if (filter.accountIds && filter.accountIds.length > 0) {
+          return entry.lines.some((line) => filter.accountIds!.includes(line.account.id));
+        }
+        return true;
+      })
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
   }
 }

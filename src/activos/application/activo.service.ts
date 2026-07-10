@@ -9,7 +9,7 @@ import { CategoriaActivoService } from './categoria-activo.service';
 import { CategoriaActivo } from '../domain/categoria-activo';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { Account } from '../../accounting/domain/account';
-import { JournalEntry } from '../../accounting/domain/journal-entry';
+import { fechaContableDeHoy, JournalEntry } from '../../accounting/domain/journal-entry';
 import { JournalLine } from '../../accounting/domain/journal-line';
 
 const CUENTA_IVA_SOPORTADO = '472001';
@@ -219,7 +219,7 @@ export class ActivoService {
     await this.accountingService.post(
       new JournalEntry({
         id: randomUUID(),
-        date: hoy,
+        date: fechaContableDeHoy(),
         description: `Amortización: ${activo.nombre}`,
         lines: [
           new JournalLine({ account: cuentaGasto, debit: importe }),
