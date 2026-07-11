@@ -13,7 +13,7 @@ import { TipoEntradaPublico, toTipoEntradaPublico } from './tipo-entrada.present
 import { TipoEntrada } from '../domain/tipo-entrada';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Rol.ADMIN)
+@Roles(Rol.ADMIN, Rol.OPERADOR)
 @Controller('tipos-entrada')
 export class TiposEntradaController {
   constructor(

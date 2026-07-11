@@ -20,12 +20,14 @@ export class PlazasController {
   ) {}
 
   @Get()
+  @Roles(Rol.ADMIN, Rol.OPERADOR)
   public async listar(): Promise<PlazaPublica[]> {
     const plazas = await this.plazaService.listar();
     return plazas.map(toPlazaPublica);
   }
 
   @Get(':id')
+  @Roles(Rol.ADMIN, Rol.OPERADOR)
   public async obtener(@Param('id') id: string): Promise<PlazaPublica> {
     const plaza = await this.plazaService.obtener(id);
     return toPlazaPublica(plaza);
@@ -53,6 +55,7 @@ export class PlazasController {
   }
 
   @Get(':plazaId/fechas')
+  @Roles(Rol.ADMIN, Rol.OPERADOR)
   public async listarFechas(@Param('plazaId') plazaId: string): Promise<FechaPublica[]> {
     const fechas = await this.fechaService.listarPorPlaza(plazaId);
     return fechas.map(toFechaPublica);

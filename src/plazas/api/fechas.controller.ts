@@ -20,6 +20,7 @@ export class FechasController {
   ) {}
 
   @Get(':id')
+  @Roles(Rol.ADMIN, Rol.OPERADOR)
   public async obtener(@Param('id') id: string): Promise<FechaPublica> {
     const fecha = await this.fechaService.obtener(id);
     return toFechaPublica(fecha);
@@ -41,6 +42,7 @@ export class FechasController {
   }
 
   @Get(':fechaId/pases')
+  @Roles(Rol.ADMIN, Rol.OPERADOR)
   public async listarPases(@Param('fechaId') fechaId: string): Promise<PasePublico[]> {
     const pases = await this.paseService.listarPorFecha(fechaId);
     return pases.map(toPasePublico);

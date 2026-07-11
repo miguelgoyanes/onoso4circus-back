@@ -22,7 +22,7 @@ import { RolesGuard } from '../../auth/api/roles.guard';
 import { Roles } from '../../auth/api/roles.decorator';
 import { CrearProductoDto } from './dto/crear-producto.dto';
 import { MoverProductoDto } from './dto/mover-producto.dto';
-import { ProductoPublico, toProductoPublico } from './producto.presenter';
+import { ProductoPublico, ProductoVentaPublico, toProductoPublico, toProductoVentaPublico } from './producto.presenter';
 import { PRODUCTOS_UPLOAD_DIR, PRODUCTOS_UPLOAD_PREFIX, productoImagenMulterOptions } from './producto-imagen.storage';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -35,6 +35,13 @@ export class ProductosController {
   public async listar(): Promise<ProductoPublico[]> {
     const productos = await this.productoService.listar();
     return productos.map(toProductoPublico);
+  }
+
+  @Get('venta')
+  @Roles(Rol.ADMIN, Rol.OPERADOR)
+  public async listarParaVenta(): Promise<ProductoVentaPublico[]> {
+    const productos = await this.productoService.listar();
+    return productos.map(toProductoVentaPublico);
   }
 
   @Get(':id')

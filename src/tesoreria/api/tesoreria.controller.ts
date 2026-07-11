@@ -10,7 +10,12 @@ import { TransferenciaDto } from './dto/transferencia.dto';
 import { MovimientoCapitalDto } from './dto/movimiento-capital.dto';
 import { ActualizarMovimientoCapitalDto } from './dto/actualizar-movimiento-capital.dto';
 import { AjusteArqueoDto } from './dto/ajuste-arqueo.dto';
-import { CuentaDineroPublica, toCuentaDineroPublica } from './cuenta-dinero.presenter';
+import {
+  CuentaCobroPublica,
+  CuentaDineroPublica,
+  toCuentaCobroPublica,
+  toCuentaDineroPublica,
+} from './cuenta-dinero.presenter';
 import { MovimientoCuentaPublico, toMovimientoCuentaPublico } from './movimiento-cuenta.presenter';
 import { TransferenciaPublica, toTransferenciaPublica } from './transferencia.presenter';
 import { MovimientoCapitalPublico, toMovimientoCapitalPublico } from './movimiento-capital.presenter';
@@ -26,6 +31,13 @@ export class TesoreriaController {
   public async listarCuentas(): Promise<CuentaDineroPublica[]> {
     const cuentas = await this.cuentaDineroService.listar();
     return cuentas.map(({ cuenta, saldo }) => toCuentaDineroPublica(cuenta, saldo));
+  }
+
+  @Get('cuentas-cobro')
+  @Roles(Rol.ADMIN, Rol.OPERADOR)
+  public async listarCuentasCobro(): Promise<CuentaCobroPublica[]> {
+    const cuentas = await this.cuentaDineroService.listar();
+    return cuentas.filter(({ cuenta }) => cuenta.activa).map(({ cuenta }) => toCuentaCobroPublica(cuenta));
   }
 
   @Get('cuentas/:id')

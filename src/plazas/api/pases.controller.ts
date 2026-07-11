@@ -14,6 +14,7 @@ export class PasesController {
   constructor(private readonly paseService: PaseService) {}
 
   @Get(':id')
+  @Roles(Rol.ADMIN, Rol.OPERADOR)
   public async obtener(@Param('id') id: string): Promise<PasePublico> {
     const pase = await this.paseService.obtener(id);
     return toPasePublico(pase);

@@ -11,7 +11,7 @@ import { ListarVentasBarQueryDto } from './dto/listar-ventas-bar-query.dto';
 import { VentaBarPublica, toVentaBarPublica } from './venta-bar.presenter';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Rol.ADMIN)
+@Roles(Rol.ADMIN, Rol.OPERADOR)
 @Controller('ventas-bar')
 export class VentasBarController {
   constructor(private readonly ventaBarService: VentaBarService) {}
@@ -45,6 +45,7 @@ export class VentasBarController {
   }
 
   @Patch('reclasificar-lote')
+  @Roles(Rol.ADMIN)
   public async reclasificarLote(@Body() dto: ReclasificarLoteVentasBarDto): Promise<VentaBarPublica[]> {
     const ventas = await this.ventaBarService.reclasificarLote(dto.ids, dto.tipoFiscal, dto.ivaPercent);
     return ventas.map(toVentaBarPublica);
