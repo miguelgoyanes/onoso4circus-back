@@ -10,6 +10,7 @@ import { VentasBarController } from './api/ventas-bar.controller';
 import { EstadoCobro } from './domain/estado-cobro';
 import { TipoFiscal } from './domain/tipo-fiscal';
 import { OrigenVenta } from './domain/origen-venta';
+import { ModalidadTipoEntrada } from './domain/modalidad-tipo-entrada';
 import { AccountingService } from '../accounting/application/accounting.service';
 import { AccountType } from '../accounting/domain/account';
 import { PlazaService } from '../plazas/application/plaza.service';
@@ -158,6 +159,7 @@ describe('Ventas — Taquilla (integración contra Postgres real)', () => {
       nombre: `General ${randomUUID()}`,
       precio: 10,
       aplicaIva: false,
+      modalidad: ModalidadTipoEntrada.PRESENCIAL,
     });
 
     const [venta] = await ventasEntradasController.crearLote({

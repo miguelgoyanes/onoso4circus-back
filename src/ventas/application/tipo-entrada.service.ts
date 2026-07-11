@@ -3,6 +3,7 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import Decimal from 'decimal.js';
 import { TipoEntrada } from '../domain/tipo-entrada';
 import { DireccionOrden } from '../domain/direccion-orden';
+import { ModalidadTipoEntrada } from '../domain/modalidad-tipo-entrada';
 import { TIPO_ENTRADA_REPOSITORY } from './tipo-entrada.repository';
 import type { TipoEntradaRepository } from './tipo-entrada.repository';
 import { VENTA_ENTRADAS_REPOSITORY } from './venta-entradas.repository';
@@ -15,10 +16,25 @@ export class TipoEntradaService {
     @Inject(VENTA_ENTRADAS_REPOSITORY) private readonly ventaEntradasRepository: VentaEntradasRepository,
   ) {}
 
-  public async crear(nombre: string, precio: Decimal, aplicaIva: boolean, color?: string): Promise<TipoEntrada> {
+  public async crear(
+    nombre: string,
+    precio: Decimal,
+    aplicaIva: boolean,
+    color?: string,
+    modalidad: ModalidadTipoEntrada = ModalidadTipoEntrada.PRESENCIAL,
+  ): Promise<TipoEntrada> {
     // Se añade al final del orden manual, igual que Producto en Stock.
     const siguienteOrden = (await this.repository.findAll()).length;
-    const tipoEntrada = new TipoEntrada(randomUUID(), nombre, precio, aplicaIva, color ?? null, siguienteOrden, true);
+    const tipoEntrada = new TipoEntrada(
+      randomUUID(),
+      nombre,
+      precio,
+      aplicaIva,
+      color ?? null,
+      modalidad,
+      siguienteOrden,
+      true,
+    );
     await this.repository.save(tipoEntrada);
     return tipoEntrada;
   }
@@ -28,10 +44,11 @@ export class TipoEntradaService {
     nombre: string,
     precio: Decimal,
     aplicaIva: boolean,
-    color?: string,
+    color: string | undefined,
+    modalidad: ModalidadTipoEntrada,
   ): Promise<TipoEntrada> {
     const tipoEntrada = await this.buscarOFallar(id);
-    const actualizado = tipoEntrada.conDatos(nombre, precio, aplicaIva, color ?? null);
+    const actualizado = tipoEntrada.conDatos(nombre, precio, aplicaIva, color ?? null, modalidad);
     await this.repository.save(actualizado);
     return actualizado;
   }

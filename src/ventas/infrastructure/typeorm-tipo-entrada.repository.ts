@@ -6,7 +6,16 @@ import { TipoEntradaRepository } from '../application/tipo-entrada.repository';
 import { TipoEntradaOrmEntity } from './orm/tipo-entrada.orm-entity';
 
 function toDomain(orm: TipoEntradaOrmEntity): TipoEntrada {
-  return new TipoEntrada(orm.id, orm.nombre, orm.precio, orm.aplicaIva, orm.color, orm.orden, orm.activo);
+  return new TipoEntrada(
+    orm.id,
+    orm.nombre,
+    orm.precio,
+    orm.aplicaIva,
+    orm.color,
+    orm.modalidad,
+    orm.orden,
+    orm.activo,
+  );
 }
 
 @Injectable()
@@ -23,6 +32,7 @@ export class TypeOrmTipoEntradaRepository implements TipoEntradaRepository {
       precio: tipoEntrada.precio,
       aplicaIva: tipoEntrada.aplicaIva,
       color: tipoEntrada.color,
+      modalidad: tipoEntrada.modalidad,
       orden: tipoEntrada.orden,
       activo: tipoEntrada.activo,
     });

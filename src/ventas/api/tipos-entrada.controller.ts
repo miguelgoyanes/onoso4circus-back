@@ -40,6 +40,7 @@ export class TiposEntradaController {
       new Decimal(dto.precio),
       dto.aplicaIva,
       dto.color,
+      dto.modalidad,
     );
     return this.presentar(tipoEntrada);
   }
@@ -52,6 +53,7 @@ export class TiposEntradaController {
       new Decimal(dto.precio),
       dto.aplicaIva,
       dto.color,
+      dto.modalidad,
     );
     return this.presentar(tipoEntrada);
   }

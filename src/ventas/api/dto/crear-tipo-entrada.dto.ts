@@ -1,4 +1,5 @@
-import { IsBoolean, IsNumber, IsOptional, IsPositive, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsPositive, IsString, MinLength } from 'class-validator';
+import { ModalidadTipoEntrada } from '../../domain/modalidad-tipo-entrada';
 
 export class CrearTipoEntradaDto {
   @IsString()
@@ -15,4 +16,7 @@ export class CrearTipoEntradaDto {
   @IsOptional()
   @IsString()
   color?: string;
+
+  @IsEnum(ModalidadTipoEntrada)
+  modalidad: ModalidadTipoEntrada;
 }

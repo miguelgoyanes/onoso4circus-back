@@ -1,6 +1,7 @@
 import Decimal from 'decimal.js';
 import { Column, Entity, PrimaryColumn } from 'typeorm';
 import { decimalTransformer } from '../../../accounting/infrastructure/orm/decimal.transformer';
+import { ModalidadTipoEntrada } from '../../domain/modalidad-tipo-entrada';
 
 @Entity('tipos_entrada')
 export class TipoEntradaOrmEntity {
@@ -18,6 +19,11 @@ export class TipoEntradaOrmEntity {
 
   @Column({ type: 'varchar', nullable: true })
   color: string | null;
+
+  // Default PRESENCIAL: los tipos de entrada ya existentes en producción, creados
+  // antes de que existiera este campo, se consideran presenciales al añadir la columna.
+  @Column({ type: 'enum', enum: ModalidadTipoEntrada, default: ModalidadTipoEntrada.PRESENCIAL })
+  modalidad: ModalidadTipoEntrada;
 
   @Column({ type: 'int' })
   orden: number;
