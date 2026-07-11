@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { EstadoPagoGasto, Gasto, GastoPersonalDetalle } from '../domain/gasto';
+import { CategoriaGasto } from '../domain/categoria-gasto';
 import { ConceptoPersonal } from '../domain/concepto-personal';
 import { TipoFiscal } from '../domain/tipo-fiscal';
 import { GASTO_REPOSITORY, GastoFilter } from './gasto.repository';
@@ -11,6 +12,7 @@ import { PlazaService } from '../../plazas/application/plaza.service';
 import { FechaService } from '../../plazas/application/fecha.service';
 import { PaseService } from '../../plazas/application/pase.service';
 import { EmpleadoService } from '../../personal/application/empleado.service';
+import { Empleado } from '../../personal/domain/empleado';
 import { RegimenEmpleado } from '../../personal/domain/regimen-empleado';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { fechaContableDeHoy, JournalEntry } from '../../accounting/domain/journal-entry';
@@ -57,6 +59,16 @@ interface RepartoIva {
   importeTotal: Decimal;
 }
 
+interface AsientoGasto {
+  lines: JournalLine[];
+  total: Decimal;
+  tipoFiscal?: TipoFiscal;
+  ivaPercent?: Decimal;
+  baseImponible?: Decimal;
+  importeIva?: Decimal;
+  detalle: GastoPersonalDetalle[];
+}
+
 @Injectable()
 export class GastoService {
   constructor(
@@ -92,6 +104,127 @@ export class GastoService {
       empleadoId: params.empleadoId,
     };
 
+    const asiento = await this.construirAsiento(params, categoria, empleado, dimensiones);
+
+    const cuentaCredito =
+      params.estadoPago === EstadoPagoGasto.PAGADO
+        ? await this.accountingService.obtenerCuentaPorId(params.cuentaPagoId!)
+        : await this.accountingService.obtenerCuentaPorCodigo(CUENTA_PROVEEDORES);
+    asiento.lines.push(new JournalLine({ account: cuentaCredito, credit: asiento.total, dimensions: dimensiones }));
+
+    const journalEntryId = randomUUID();
+    await this.accountingService.post(
+      new JournalEntry({
+        id: journalEntryId,
+        date: params.fecha,
+        description: `Gasto (${categoria.nombre}): ${params.descripcion}`,
+        lines: asiento.lines,
+      }),
+    );
+
+    const gasto = new Gasto({
+      id: randomUUID(),
+      categoriaId: params.categoriaId,
+      fecha: params.fecha,
+      descripcion: params.descripcion,
+      importe: asiento.total,
+      estadoPago: params.estadoPago,
+      plazaId: params.plazaId,
+      fechaId: params.fechaId,
+      paseId: params.paseId,
+      empleadoId: params.empleadoId,
+      cuentaPagoId: params.cuentaPagoId,
+      tipoFiscal: asiento.tipoFiscal,
+      ivaPercent: asiento.ivaPercent,
+      baseImponible: asiento.baseImponible,
+      importeIva: asiento.importeIva,
+      detalle: asiento.detalle,
+      journalEntryIds: [journalEntryId],
+    });
+    await this.repository.save(gasto);
+    return gasto;
+  }
+
+  // Revierte íntegramente los asientos anteriores del gasto y postea uno nuevo que refleja el
+  // estado actual (misma lógica de construcción que crear(), incluida categoría/estadoPago —
+  // aquí sí son editables, a diferencia de ContratoIngreso). Nunca se reescribe un asiento ya
+  // posteado: siempre se revierte hacia adelante y se vuelve a postear.
+  public async actualizar(id: string, params: CrearGastoParams): Promise<Gasto> {
+    const anterior = await this.buscarOFallar(id);
+
+    if (params.plazaId) await this.plazaService.obtener(params.plazaId);
+    if (params.fechaId) await this.fechaService.obtener(params.fechaId);
+    if (params.paseId) await this.paseService.obtener(params.paseId);
+
+    const categoria = await this.categoriaGastoService.obtener(params.categoriaId);
+
+    if (categoria.requiereEmpleado && !params.empleadoId) {
+      throw new BadRequestException('empleadoId es obligatorio para esta categoría');
+    }
+    const empleado = params.empleadoId ? await this.empleadoService.obtener(params.empleadoId) : undefined;
+
+    if (params.estadoPago === EstadoPagoGasto.PAGADO && !params.cuentaPagoId) {
+      throw new BadRequestException('cuentaPagoId es obligatorio cuando estadoPago = PAGADO');
+    }
+
+    const dimensiones: JournalLineDimensions = {
+      plazaId: params.plazaId,
+      fechaId: params.fechaId,
+      paseId: params.paseId,
+      empleadoId: params.empleadoId,
+    };
+
+    const asiento = await this.construirAsiento(params, categoria, empleado, dimensiones);
+
+    const cuentaCredito =
+      params.estadoPago === EstadoPagoGasto.PAGADO
+        ? await this.accountingService.obtenerCuentaPorId(params.cuentaPagoId!)
+        : await this.accountingService.obtenerCuentaPorCodigo(CUENTA_PROVEEDORES);
+    asiento.lines.push(new JournalLine({ account: cuentaCredito, credit: asiento.total, dimensions: dimensiones }));
+
+    for (const journalEntryId of anterior.journalEntryIds) {
+      await this.accountingService.eliminarAsiento(journalEntryId);
+    }
+
+    const journalEntryId = randomUUID();
+    await this.accountingService.post(
+      new JournalEntry({
+        id: journalEntryId,
+        date: params.fecha,
+        description: `Gasto (${categoria.nombre}): ${params.descripcion}`,
+        lines: asiento.lines,
+      }),
+    );
+
+    const actualizado = new Gasto({
+      id: anterior.id,
+      categoriaId: params.categoriaId,
+      fecha: params.fecha,
+      descripcion: params.descripcion,
+      importe: asiento.total,
+      estadoPago: params.estadoPago,
+      plazaId: params.plazaId,
+      fechaId: params.fechaId,
+      paseId: params.paseId,
+      empleadoId: params.empleadoId,
+      cuentaPagoId: params.cuentaPagoId,
+      tipoFiscal: asiento.tipoFiscal,
+      ivaPercent: asiento.ivaPercent,
+      baseImponible: asiento.baseImponible,
+      importeIva: asiento.importeIva,
+      detalle: asiento.detalle,
+      journalEntryIds: [journalEntryId],
+    });
+    await this.repository.save(actualizado);
+    return actualizado;
+  }
+
+  private async construirAsiento(
+    params: CrearGastoParams,
+    categoria: CategoriaGasto,
+    empleado: Empleado | undefined,
+    dimensiones: JournalLineDimensions,
+  ): Promise<AsientoGasto> {
     const lines: JournalLine[] = [];
     let total = new Decimal(0);
     let tipoFiscalGasto: TipoFiscal | undefined;
@@ -202,43 +335,7 @@ export class GastoService {
       }
     }
 
-    const cuentaCredito =
-      params.estadoPago === EstadoPagoGasto.PAGADO
-        ? await this.accountingService.obtenerCuentaPorId(params.cuentaPagoId!)
-        : await this.accountingService.obtenerCuentaPorCodigo(CUENTA_PROVEEDORES);
-    lines.push(new JournalLine({ account: cuentaCredito, credit: total, dimensions: dimensiones }));
-
-    const journalEntryId = randomUUID();
-    await this.accountingService.post(
-      new JournalEntry({
-        id: journalEntryId,
-        date: params.fecha,
-        description: `Gasto (${categoria.nombre}): ${params.descripcion}`,
-        lines,
-      }),
-    );
-
-    const gasto = new Gasto({
-      id: randomUUID(),
-      categoriaId: params.categoriaId,
-      fecha: params.fecha,
-      descripcion: params.descripcion,
-      importe: total,
-      estadoPago: params.estadoPago,
-      plazaId: params.plazaId,
-      fechaId: params.fechaId,
-      paseId: params.paseId,
-      empleadoId: params.empleadoId,
-      cuentaPagoId: params.cuentaPagoId,
-      tipoFiscal: tipoFiscalGasto,
-      ivaPercent: ivaPercentGasto,
-      baseImponible: baseImponibleGasto,
-      importeIva: importeIvaGasto,
-      detalle,
-      journalEntryIds: [journalEntryId],
-    });
-    await this.repository.save(gasto);
-    return gasto;
+    return { lines, total, tipoFiscal: tipoFiscalGasto, ivaPercent: ivaPercentGasto, baseImponible: baseImponibleGasto, importeIva: importeIvaGasto, detalle };
   }
 
   public async pagarPendiente(id: string, cuentaPagoId: string): Promise<Gasto> {

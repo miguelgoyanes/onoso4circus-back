@@ -28,7 +28,6 @@ export class Gasto {
   public readonly cuentaPagoId?: string;
   // Reparto fiscal: representa SIEMPRE un único split por gasto, sea el importe entero
   // (categoría normal con aplica_iva) o específicamente la línea SALARIO (personal + AUTONOMO).
-  // Se fija al crear el gasto y no se vuelve a tocar — no existe edición posterior.
   public readonly tipoFiscal?: TipoFiscal;
   public readonly ivaPercent?: Decimal;
   public readonly baseImponible?: Decimal;

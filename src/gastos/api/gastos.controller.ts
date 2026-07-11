@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { GastoService } from '../application/gasto.service';
 import { CategoriaGastoService } from '../application/categoria-gasto.service';
 import { Rol } from '../../auth/domain/usuario';
@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../../auth/api/jwt-auth.guard';
 import { RolesGuard } from '../../auth/api/roles.guard';
 import { Roles } from '../../auth/api/roles.decorator';
 import { CrearGastoDto } from './dto/crear-gasto.dto';
+import { ActualizarGastoDto } from './dto/actualizar-gasto.dto';
 import { PagarGastoDto } from './dto/pagar-gasto.dto';
 import { ListarGastosQueryDto } from './dto/listar-gastos-query.dto';
 import { GastoPublico, toGastoPublico } from './gasto.presenter';
@@ -39,6 +40,27 @@ export class GastosController {
   @Post()
   public async crear(@Body() dto: CrearGastoDto): Promise<GastoPublico> {
     const gasto = await this.gastoService.crear({
+      categoriaId: dto.categoriaId,
+      fecha: new Date(dto.fecha),
+      descripcion: dto.descripcion,
+      estadoPago: dto.estadoPago,
+      cuentaPagoId: dto.cuentaPagoId,
+      plazaId: dto.plazaId,
+      fechaId: dto.fechaId,
+      paseId: dto.paseId,
+      empleadoId: dto.empleadoId,
+      importe: dto.importe,
+      tipoFiscal: dto.tipoFiscal,
+      ivaPercent: dto.ivaPercent,
+      baseImponible: dto.baseImponible,
+      conceptos: dto.conceptos,
+    });
+    return this.presentar(gasto);
+  }
+
+  @Patch(':id')
+  public async actualizar(@Param('id') id: string, @Body() dto: ActualizarGastoDto): Promise<GastoPublico> {
+    const gasto = await this.gastoService.actualizar(id, {
       categoriaId: dto.categoriaId,
       fecha: new Date(dto.fecha),
       descripcion: dto.descripcion,
