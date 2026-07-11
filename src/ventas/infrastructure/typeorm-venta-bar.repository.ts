@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { And, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
 import { VentaBar } from '../domain/venta-bar';
 import { VentaBarFilter, VentaBarRepository } from '../application/venta-bar.repository';
 import { VentaBarOrmEntity } from './orm/venta-bar.orm-entity';
@@ -59,6 +59,13 @@ export class TypeOrmVentaBarRepository implements VentaBarRepository {
         ...(filter?.paseId ? { paseId: filter.paseId } : {}),
         ...(filter?.fechaId ? { fechaId: filter.fechaId } : {}),
         ...(filter?.plazaId ? { plazaId: filter.plazaId } : {}),
+        ...(filter?.desde && filter?.hasta
+          ? { creadoEn: And(MoreThanOrEqual(filter.desde), LessThan(filter.hasta)) }
+          : filter?.desde
+            ? { creadoEn: MoreThanOrEqual(filter.desde) }
+            : filter?.hasta
+              ? { creadoEn: LessThan(filter.hasta) }
+              : {}),
       },
       order: { creadoEn: 'DESC' },
     });

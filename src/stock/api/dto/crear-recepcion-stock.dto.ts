@@ -1,5 +1,6 @@
 import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsUUID, ValidateIf } from 'class-validator';
 import { TipoFiscal } from '../../domain/tipo-fiscal';
+import { UnidadMedida } from '../../domain/unidad-medida';
 
 export class CrearRecepcionStockDto {
   @IsUUID()
@@ -38,4 +39,14 @@ export class CrearRecepcionStockDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   baseImponible?: number;
+
+  // Solo para INSUMO — cantidad física comprada (ej. 15), puramente informativa.
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @IsPositive()
+  cantidadMedida?: number;
+
+  @IsOptional()
+  @IsEnum(UnidadMedida)
+  unidadMedida?: UnidadMedida;
 }

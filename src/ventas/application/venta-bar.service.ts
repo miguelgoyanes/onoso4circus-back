@@ -6,6 +6,8 @@ import { TipoFiscal } from '../domain/tipo-fiscal';
 import { VENTA_BAR_REPOSITORY, VentaBarFilter } from './venta-bar.repository';
 import type { VentaBarRepository } from './venta-bar.repository';
 import { ProductoService } from '../../stock/application/producto.service';
+import { TipoProducto } from '../../stock/domain/tipo-producto';
+import { CosteElaboradoService } from './coste-elaborado.service';
 import { PaseService } from '../../plazas/application/pase.service';
 import { FechaService } from '../../plazas/application/fecha.service';
 import { AccountingService } from '../../accounting/application/accounting.service';
@@ -36,6 +38,7 @@ export class VentaBarService {
   constructor(
     @Inject(VENTA_BAR_REPOSITORY) private readonly repository: VentaBarRepository,
     private readonly productoService: ProductoService,
+    private readonly costeElaboradoService: CosteElaboradoService,
     private readonly paseService: PaseService,
     private readonly fechaService: FechaService,
     private readonly accountingService: AccountingService,
@@ -209,15 +212,27 @@ export class VentaBarService {
         throw new BadRequestException('cantidad debe ser mayor que 0');
       }
       const producto = await this.productoService.obtener(l.productoId);
-      lineas.push(new VentaBarLinea(l.productoId, l.cantidad, producto.precioVentaPublico, producto.costeUnitarioActual));
+      // ELABORADO (ej. palomitas): este coste es solo informativo (media histórica sobre
+      // lotes de insumo ya cerrados) — nunca se asienta en el momento de la venta, ver
+      // construirAsiento. El coste real se reconoce, exacto, al cerrar el lote de insumo.
+      const costeUnitario =
+        producto.tipo === TipoProducto.ELABORADO
+          ? await this.costeElaboradoService.costeAproximado(l.productoId)
+          : producto.costeUnitarioActual;
+      lineas.push(new VentaBarLinea(l.productoId, l.cantidad, producto.precioVentaPublico, costeUnitario));
     }
     return lineas;
   }
 
   // signo -1 al vender (consume stock), +1 al revertir una venta editada o eliminada
-  // (repone). Deja el coste medio ponderado intacto — una venta nunca lo altera.
+  // (repone). Deja el coste medio ponderado intacto — una venta nunca lo altera. Un
+  // ELABORADO no tiene cantidadActual/stock propio — nada que ajustar.
   private async aplicarStock(lineas: VentaBarLinea[], signo: 1 | -1): Promise<void> {
     for (const l of lineas) {
+      const producto = await this.productoService.obtener(l.productoId);
+      if (producto.tipo === TipoProducto.ELABORADO) {
+        continue;
+      }
       await this.productoService.ajustarCantidadPorVenta(l.productoId, signo * l.cantidad);
     }
   }
@@ -239,15 +254,26 @@ export class VentaBarService {
     for (const linea of lineas) {
       const dimensionesLinea: JournalLineDimensions = { ...dimensionesBase, productoId: linea.productoId };
       const subtotalPrecio = linea.precioUnitarioAplicado.times(linea.cantidad).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-      const subtotalCoste = linea.costeUnitarioAplicado.times(linea.cantidad).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
       total = total.plus(subtotalPrecio);
-      // Si el producto todavía no tiene coste medio establecido (nunca ha entrado stock por
-      // recepción), no hay nada que asentar como coste — JournalLine rechaza una línea con
-      // debit y credit a cero. No bloquea la venta, solo omite el par de coste.
-      if (!subtotalCoste.isZero()) {
-        lines.push(new JournalLine({ account: cuentaCoste, debit: subtotalCoste, dimensions: dimensionesLinea }));
-        lines.push(new JournalLine({ account: cuentaStock, credit: subtotalCoste, dimensions: dimensionesLinea }));
+
+      const producto = await this.productoService.obtener(linea.productoId);
+      // Un ELABORADO nunca asienta coste en el momento de la venta — no se sabe con certeza
+      // hasta que se cierra el lote de insumo (ver CosteElaboradoService.iniciarUsoLote), que
+      // es cuando se reconoce exacto de una sola vez. costeUnitarioAplicado aquí es solo el
+      // valor aproximado snapshoteado para mostrar en el histórico del pedido.
+      if (producto.tipo === TipoProducto.ELABORADO) {
+        continue;
       }
+
+      const subtotalCoste = linea.costeUnitarioAplicado.times(linea.cantidad).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      // Si el producto todavía no tiene coste establecido (nunca ha tenido recepción), no hay
+      // nada que asentar como coste — JournalLine rechaza una línea con debit y credit a
+      // cero. No bloquea la venta, solo omite el par de coste.
+      if (subtotalCoste.isZero()) {
+        continue;
+      }
+      lines.push(new JournalLine({ account: cuentaCoste, debit: subtotalCoste, dimensions: dimensionesLinea }));
+      lines.push(new JournalLine({ account: cuentaStock, credit: subtotalCoste, dimensions: dimensionesLinea }));
     }
 
     let resto: Pick<AsientoPedido, 'tipoFiscal' | 'ivaPercent' | 'baseImponible' | 'importeIva'>;

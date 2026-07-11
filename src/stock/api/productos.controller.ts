@@ -40,7 +40,7 @@ export class ProductosController {
   @Get('venta')
   @Roles(Rol.ADMIN, Rol.OPERADOR)
   public async listarParaVenta(): Promise<ProductoVentaPublico[]> {
-    const productos = await this.productoService.listar();
+    const productos = await this.productoService.listarVendibles();
     return productos.map(toProductoVentaPublico);
   }
 
@@ -52,20 +52,26 @@ export class ProductosController {
 
   @Post()
   public async crear(@Body() dto: CrearProductoDto): Promise<ProductoPublico> {
+    // Un INSUMO no tiene PVP (nunca se vende directamente) — 0 es su ausencia, no un precio.
     const producto = await this.productoService.crear(
       dto.nombre,
-      new Decimal(dto.precioVentaPublico),
+      new Decimal(dto.precioVentaPublico ?? 0),
       dto.aplicaIva,
+      dto.tipo,
+      dto.familiaElaboradoId,
+      dto.factorEquivalencia != null ? new Decimal(dto.factorEquivalencia) : undefined,
     );
     return toProductoPublico(producto);
   }
 
   @Patch(':id')
   public async actualizar(@Param('id') id: string, @Body() dto: CrearProductoDto): Promise<ProductoPublico> {
+    // tipo/familiaElaboradoId/factorEquivalencia son inmutables tras la creación — actualizar
+    // solo toca nombre/precio/IVA, igual que antes.
     const producto = await this.productoService.actualizar(
       id,
       dto.nombre,
-      new Decimal(dto.precioVentaPublico),
+      new Decimal(dto.precioVentaPublico ?? 0),
       dto.aplicaIva,
     );
     return toProductoPublico(producto);

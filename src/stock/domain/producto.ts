@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { TipoProducto } from './tipo-producto';
 
 export class Producto {
   constructor(
@@ -13,6 +14,13 @@ export class Producto {
     // Orden manual elegido por Brandon (menor = antes) — determina cómo se listan aquí y,
     // más adelante, cómo aparecerán los productos en la pantalla de venta del bar.
     public readonly orden: number = 0,
+    public readonly tipo: TipoProducto = TipoProducto.VENTA_DIRECTA,
+    // Solo con sentido para tipo ELABORADO — a qué FamiliaElaborado pertenece (comparte
+    // insumos con las demás variantes/tamaños de esa misma familia).
+    public readonly familiaElaboradoId: string | null = null,
+    // Solo con sentido para tipo ELABORADO — cuánto consume esta variante respecto a la
+    // unidad base de su familia (ej. palomita pequeña = 1, grande = 2).
+    public readonly factorEquivalencia: Decimal | null = null,
   ) {}
 
   public conDatos(nombre: string, precioVentaPublico: Decimal, aplicaIva: boolean): Producto {
@@ -26,6 +34,9 @@ export class Producto {
       this.activo,
       this.imagenUrl,
       this.orden,
+      this.tipo,
+      this.familiaElaboradoId,
+      this.factorEquivalencia,
     );
   }
 
@@ -40,6 +51,9 @@ export class Producto {
       this.activo,
       imagenUrl,
       this.orden,
+      this.tipo,
+      this.familiaElaboradoId,
+      this.factorEquivalencia,
     );
   }
 
@@ -57,6 +71,9 @@ export class Producto {
       this.activo,
       this.imagenUrl,
       this.orden,
+      this.tipo,
+      this.familiaElaboradoId,
+      this.factorEquivalencia,
     );
   }
 
@@ -71,6 +88,9 @@ export class Producto {
       this.activo,
       this.imagenUrl,
       orden,
+      this.tipo,
+      this.familiaElaboradoId,
+      this.factorEquivalencia,
     );
   }
 
@@ -85,6 +105,9 @@ export class Producto {
       false,
       this.imagenUrl,
       this.orden,
+      this.tipo,
+      this.familiaElaboradoId,
+      this.factorEquivalencia,
     );
   }
 
@@ -99,6 +122,9 @@ export class Producto {
       true,
       this.imagenUrl,
       this.orden,
+      this.tipo,
+      this.familiaElaboradoId,
+      this.factorEquivalencia,
     );
   }
 }

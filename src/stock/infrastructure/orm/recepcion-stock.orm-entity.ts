@@ -2,6 +2,7 @@ import Decimal from 'decimal.js';
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 import { ProductoOrmEntity } from './producto.orm-entity';
 import { TipoFiscal } from '../../domain/tipo-fiscal';
+import { UnidadMedida } from '../../domain/unidad-medida';
 import { decimalTransformer } from '../../../accounting/infrastructure/orm/decimal.transformer';
 import { decimalNullableTransformer } from './decimal-nullable.transformer';
 
@@ -81,4 +82,26 @@ export class RecepcionStockOrmEntity {
 
   @Column({ type: 'varchar', name: 'journal_entry_id' })
   journalEntryId: string;
+
+  @Column({
+    type: 'numeric',
+    precision: 10,
+    scale: 3,
+    name: 'cantidad_medida',
+    nullable: true,
+    transformer: decimalNullableTransformer,
+  })
+  cantidadMedida: Decimal | null;
+
+  @Column({ type: 'enum', enum: UnidadMedida, name: 'unidad_medida', nullable: true })
+  unidadMedida: UnidadMedida | null;
+
+  @Column({ type: 'timestamptz', name: 'fecha_inicio_uso', nullable: true })
+  fechaInicioUso: Date | null;
+
+  @Column({ type: 'varchar', name: 'cierre_journal_entry_id', nullable: true })
+  cierreJournalEntryId: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  cerrado: boolean;
 }

@@ -10,6 +10,8 @@ import { RecepcionStockRepository } from './recepcion-stock.repository';
 import { AjusteStock } from '../domain/ajuste-stock';
 import { AjusteStockRepository } from './ajuste-stock.repository';
 import { TipoFiscal } from '../domain/tipo-fiscal';
+import { TipoProducto } from '../domain/tipo-producto';
+import { UnidadMedida } from '../domain/unidad-medida';
 import { ProductoService } from './producto.service';
 import { RecepcionStockService } from './recepcion-stock.service';
 
@@ -241,6 +243,136 @@ describe('RecepcionStockService', () => {
       expect((await accountingService.saldoPorCuenta(cuenta472001.id)).equals(new Decimal(21))).toBe(true);
       const cuentaStock = await accountingService.obtenerCuentaPorCodigo('300001');
       expect((await accountingService.saldoPorCuenta(cuentaStock.id)).equals(new Decimal(100))).toBe(true);
+    });
+  });
+
+  describe('INSUMO: lotes de cantidad=1, cantidadMedida informativa, ciclo de uso', () => {
+    it('rechaza una recepción de INSUMO con cantidad distinta de 1', async () => {
+      const maiz = await productoService.crear('Maíz', new Decimal(0), false, TipoProducto.INSUMO);
+      await expect(
+        service.crear({
+          productoId: maiz.id,
+          cantidad: 15,
+          costeUnitario: 20,
+          fecha: new Date('2026-07-01'),
+          cuentaOrigenId,
+        }),
+      ).rejects.toThrow(/siempre una unidad/i);
+    });
+
+    it('rechaza recepciones para un producto ELABORADO', async () => {
+      const palomitaPequena = await productoService.crear(
+        'Palomita pequeña',
+        new Decimal(2),
+        true,
+        TipoProducto.ELABORADO,
+        'familia-1',
+        new Decimal(1),
+      );
+      await expect(
+        service.crear({
+          productoId: palomitaPequena.id,
+          cantidad: 1,
+          costeUnitario: 5,
+          fecha: new Date('2026-07-01'),
+          cuentaOrigenId,
+        }),
+      ).rejects.toThrow(/no tiene recepciones propias/i);
+    });
+
+    it('guarda cantidadMedida/unidadMedida (informativas) sin que afecten al coste', async () => {
+      const maiz = await productoService.crear('Maíz', new Decimal(0), false, TipoProducto.INSUMO);
+      const lote = await service.crear({
+        productoId: maiz.id,
+        cantidad: 1,
+        costeUnitario: 20, // coste total del saco entero
+        fecha: new Date('2026-07-01'),
+        cuentaOrigenId,
+        cantidadMedida: 15,
+        unidadMedida: UnidadMedida.KG,
+      });
+
+      expect(lote.cantidadMedida?.equals(new Decimal(15))).toBe(true);
+      expect(lote.unidadMedida).toBe(UnidadMedida.KG);
+      expect(lote.baseImponible.equals(new Decimal(20))).toBe(true);
+      // Un INSUMO no participa del PMP por unidad — recalcularDesdeHistorial es un no-op.
+      const actualizado = await productoService.obtener(maiz.id);
+      expect(actualizado.cantidadActual).toBe(0);
+      expect(actualizado.costeUnitarioActual.equals(new Decimal(0))).toBe(true);
+    });
+
+    it('loteActivo es null hasta que se inicia el uso de un lote', async () => {
+      const maiz = await productoService.crear('Maíz', new Decimal(0), false, TipoProducto.INSUMO);
+      await service.crear({
+        productoId: maiz.id,
+        cantidad: 1,
+        costeUnitario: 20,
+        fecha: new Date('2026-07-01'),
+        cuentaOrigenId,
+      });
+
+      expect(await service.loteActivo(maiz.id)).toBeNull();
+    });
+
+    it('iniciarUso marca el lote como activo, y abrir el siguiente cierra el anterior', async () => {
+      const maiz = await productoService.crear('Maíz', new Decimal(0), false, TipoProducto.INSUMO);
+      const lote1 = await service.crear({
+        productoId: maiz.id,
+        cantidad: 1,
+        costeUnitario: 20,
+        fecha: new Date('2026-07-01'),
+        cuentaOrigenId,
+      });
+      const lote2 = await service.crear({
+        productoId: maiz.id,
+        cantidad: 1,
+        costeUnitario: 25,
+        fecha: new Date('2026-07-10'),
+        cuentaOrigenId,
+      });
+
+      await service.iniciarUso(lote1.id, new Date('2026-07-01T09:00:00Z'));
+      let activo = await service.loteActivo(maiz.id);
+      expect(activo?.id).toBe(lote1.id);
+
+      // Abrir el segundo lote deja al primero "consumido" de forma derivada, sin tocarlo.
+      await service.iniciarUso(lote2.id, new Date('2026-07-10T09:00:00Z'));
+      activo = await service.loteActivo(maiz.id);
+      expect(activo?.id).toBe(lote2.id);
+    });
+
+    it('rechaza iniciarUso sobre un lote de un producto que no es INSUMO', async () => {
+      const producto = await productoService.crear('Coca-Cola', new Decimal(2), true);
+      const recepcion = await service.crear({
+        productoId: producto.id,
+        cantidad: 24,
+        costeUnitario: 0.5,
+        fecha: new Date('2026-07-10'),
+        cuentaOrigenId,
+      });
+      await expect(service.iniciarUso(recepcion.id, new Date())).rejects.toThrow(/solo los lotes de un insumo/i);
+    });
+
+    it('rechaza editar o eliminar un lote ya cerrado (historia ya asentada)', async () => {
+      const maiz = await productoService.crear('Maíz', new Decimal(0), false, TipoProducto.INSUMO);
+      const lote = await service.crear({
+        productoId: maiz.id,
+        cantidad: 1,
+        costeUnitario: 20,
+        fecha: new Date('2026-07-01'),
+        cuentaOrigenId,
+      });
+      await service.marcarCierre(lote.id, 'je-cierre-1');
+
+      await expect(
+        service.actualizar(lote.id, {
+          cantidad: 1,
+          costeUnitario: 25,
+          fecha: new Date('2026-07-01'),
+          cuentaOrigenId,
+        }),
+      ).rejects.toThrow(/ya se cerró/i);
+      await expect(service.eliminar(lote.id)).rejects.toThrow(/ya se cerró/i);
     });
   });
 });

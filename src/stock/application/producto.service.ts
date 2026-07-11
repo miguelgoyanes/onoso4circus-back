@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { Producto } from '../domain/producto';
+import { TipoProducto } from '../domain/tipo-producto';
 import { DireccionOrden } from '../domain/direccion-orden';
 import { PRODUCTO_REPOSITORY } from './producto.repository';
 import type { ProductoRepository } from './producto.repository';
@@ -18,7 +19,17 @@ export class ProductoService {
     @Inject(AJUSTE_STOCK_REPOSITORY) private readonly ajusteRepository: AjusteStockRepository,
   ) {}
 
-  public async crear(nombre: string, precioVentaPublico: Decimal, aplicaIva: boolean): Promise<Producto> {
+  public async crear(
+    nombre: string,
+    precioVentaPublico: Decimal,
+    aplicaIva: boolean,
+    tipo: TipoProducto = TipoProducto.VENTA_DIRECTA,
+    familiaElaboradoId?: string,
+    factorEquivalencia?: Decimal,
+  ): Promise<Producto> {
+    if (tipo === TipoProducto.ELABORADO && (!familiaElaboradoId || !factorEquivalencia)) {
+      throw new BadRequestException('Un producto ELABORADO necesita familiaElaboradoId y factorEquivalencia');
+    }
     // Se añade al final del orden manual — un producto nuevo no debe colarse entre los
     // que Brandon ya ha colocado a su gusto.
     const siguienteOrden = (await this.repository.findAll()).length;
@@ -32,9 +43,19 @@ export class ProductoService {
       true,
       null,
       siguienteOrden,
+      tipo,
+      tipo === TipoProducto.ELABORADO ? (familiaElaboradoId ?? null) : null,
+      tipo === TipoProducto.ELABORADO ? (factorEquivalencia ?? null) : null,
     );
     await this.repository.save(producto);
     return producto;
+  }
+
+  // Para la pantalla de venta del bar: los INSUMO nunca se venden directamente (maíz,
+  // aceite, sal solo tienen sentido consumidos internamente por un ELABORADO).
+  public async listarVendibles(): Promise<Producto[]> {
+    const productos = await this.repository.findAll();
+    return productos.filter((p) => p.tipo !== TipoProducto.INSUMO);
   }
 
   public async actualizar(
@@ -141,6 +162,13 @@ export class ProductoService {
    */
   public async recalcularDesdeHistorial(id: string): Promise<Producto> {
     const producto = await this.buscarOFallar(id);
+    // Un INSUMO no se compra "por unidad blendeable" desde recepciones/ajustes — su media se
+    // actualiza solo al CERRAR un lote (ver registrarCierreLoteInsumo, en ventas/
+    // CosteElaboradoService). Un ELABORADO no tiene stock propio en absoluto. En ambos casos
+    // este replay (recepciones+ajustes) no aplica — no-op.
+    if (producto.tipo !== TipoProducto.VENTA_DIRECTA) {
+      return producto;
+    }
     const [recepciones, ajustes] = await Promise.all([
       this.recepcionRepository.findAll(id),
       this.ajusteRepository.findAll(id),
@@ -172,6 +200,33 @@ export class ProductoService {
     }
 
     const actualizado = producto.conCantidadYCoste(cantidadActual, costeMedio);
+    await this.repository.save(actualizado);
+    return actualizado;
+  }
+
+  /**
+   * Llamado por CosteElaboradoService.iniciarUsoLote (ventas) al CERRAR un lote de INSUMO —
+   * incorpora su coste-por-unidad-equivalente a la media acumulada de ese insumo, con el
+   * mismo criterio de PMP que recalcularDesdeHistorial (ponderado por cantidad), solo que
+   * aquí "cantidad" son unidades equivalentes vendidas y no unidades físicas. Repurpose
+   * deliberado de costeUnitarioActual/cantidadActual para INSUMO — es una media histórica
+   * sobre lotes YA cerrados, nunca se revisita un cierre anterior (igual que un asiento ya
+   * posteado no se reabre).
+   */
+  public async registrarCierreLoteInsumo(
+    insumoId: string,
+    unidadesDelLote: Decimal,
+    costeDelLote: Decimal,
+  ): Promise<Producto> {
+    const producto = await this.buscarOFallar(insumoId);
+    const valorPrevio = producto.costeUnitarioActual.times(producto.cantidadActual);
+    const valorNuevo = costeDelLote.times(unidadesDelLote);
+    const cantidadNueva = producto.cantidadActual + Math.round(unidadesDelLote.toNumber());
+    const costeMedio =
+      cantidadNueva > 0
+        ? valorPrevio.plus(valorNuevo).dividedBy(cantidadNueva).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
+        : new Decimal(0);
+    const actualizado = producto.conCantidadYCoste(cantidadNueva, costeMedio);
     await this.repository.save(actualizado);
     return actualizado;
   }

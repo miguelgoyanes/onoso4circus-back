@@ -16,6 +16,12 @@ import { RecepcionStockRepository } from '../../stock/application/recepcion-stoc
 import { AjusteStock } from '../../stock/domain/ajuste-stock';
 import { AjusteStockRepository } from '../../stock/application/ajuste-stock.repository';
 import { ProductoService } from '../../stock/application/producto.service';
+import { RecepcionStockService } from '../../stock/application/recepcion-stock.service';
+import { FamiliaElaboradoService } from '../../stock/application/familia-elaborado.service';
+import { FamiliaElaborado } from '../../stock/domain/familia-elaborado';
+import { FamiliaElaboradoRepository } from '../../stock/application/familia-elaborado.repository';
+import { VinculacionInsumo } from '../../stock/domain/vinculacion-insumo';
+import { VinculacionInsumoRepository } from '../../stock/application/vinculacion-insumo.repository';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { InMemoryJournalEntryRepository } from '../../accounting/infrastructure/in-memory-journal-entry.repository';
 import { InMemoryAccountRepository } from '../../accounting/infrastructure/in-memory-account.repository';
@@ -23,6 +29,7 @@ import { AccountType } from '../../accounting/domain/account';
 import { TipoFiscal } from '../domain/tipo-fiscal';
 import { InMemoryVentaBarRepository } from '../infrastructure/in-memory-venta-bar.repository';
 import { VentaBarService } from './venta-bar.service';
+import { CosteElaboradoService } from './coste-elaborado.service';
 
 class InMemoryPlazaRepository implements PlazaRepository {
   private readonly plazas = new Map<string, Plaza>();
@@ -126,6 +133,44 @@ class InMemoryAjusteStockRepository implements AjusteStockRepository {
   }
 }
 
+class InMemoryFamiliaElaboradoRepository implements FamiliaElaboradoRepository {
+  private readonly familias = new Map<string, FamiliaElaborado>();
+  async save(familia: FamiliaElaborado): Promise<void> {
+    this.familias.set(familia.id, familia);
+  }
+  async findById(id: string): Promise<FamiliaElaborado | null> {
+    return this.familias.get(id) ?? null;
+  }
+  async findAll(): Promise<FamiliaElaborado[]> {
+    return [...this.familias.values()];
+  }
+  async delete(id: string): Promise<void> {
+    this.familias.delete(id);
+  }
+}
+
+class InMemoryVinculacionInsumoRepository implements VinculacionInsumoRepository {
+  private readonly vinculaciones = new Map<string, VinculacionInsumo>();
+  async save(vinculacion: VinculacionInsumo): Promise<void> {
+    this.vinculaciones.set(vinculacion.id, vinculacion);
+  }
+  async findById(id: string): Promise<VinculacionInsumo | null> {
+    return this.vinculaciones.get(id) ?? null;
+  }
+  async findByFamilia(familiaElaboradoId: string): Promise<VinculacionInsumo[]> {
+    return [...this.vinculaciones.values()].filter((v) => v.familiaElaboradoId === familiaElaboradoId);
+  }
+  async findByInsumo(insumoId: string): Promise<VinculacionInsumo | null> {
+    return [...this.vinculaciones.values()].find((v) => v.insumoId === insumoId) ?? null;
+  }
+  async existeConInsumo(insumoId: string): Promise<boolean> {
+    return [...this.vinculaciones.values()].some((v) => v.insumoId === insumoId);
+  }
+  async delete(id: string): Promise<void> {
+    this.vinculaciones.delete(id);
+  }
+}
+
 describe('VentaBarService', () => {
   let accountingService: AccountingService;
   let productoRepo: InMemoryProductoRepository;
@@ -145,11 +190,27 @@ describe('VentaBarService', () => {
     accountingService = new AccountingService(new InMemoryJournalEntryRepository(), new InMemoryAccountRepository());
 
     productoRepo = new InMemoryProductoRepository();
-    productoService = new ProductoService(productoRepo, new InMemoryRecepcionStockRepository(), new InMemoryAjusteStockRepository());
+    const recepcionRepo = new InMemoryRecepcionStockRepository();
+    productoService = new ProductoService(productoRepo, recepcionRepo, new InMemoryAjusteStockRepository());
+    const recepcionStockService = new RecepcionStockService(recepcionRepo, productoService, accountingService);
+    const familiaService = new FamiliaElaboradoService(
+      new InMemoryFamiliaElaboradoRepository(),
+      new InMemoryVinculacionInsumoRepository(),
+      productoService,
+    );
+    const ventaBarRepo = new InMemoryVentaBarRepository();
+    const costeElaboradoService = new CosteElaboradoService(
+      productoService,
+      recepcionStockService,
+      familiaService,
+      accountingService,
+      ventaBarRepo,
+    );
 
     service = new VentaBarService(
-      new InMemoryVentaBarRepository(),
+      ventaBarRepo,
       productoService,
+      costeElaboradoService,
       paseService,
       fechaService,
       accountingService,

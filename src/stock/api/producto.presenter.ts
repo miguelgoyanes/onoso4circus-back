@@ -1,4 +1,5 @@
 import { Producto } from '../domain/producto';
+import { TipoProducto } from '../domain/tipo-producto';
 
 export interface ProductoPublico {
   id: string;
@@ -10,6 +11,9 @@ export interface ProductoPublico {
   activo: boolean;
   imagenUrl: string | null;
   orden: number;
+  tipo: TipoProducto;
+  familiaElaboradoId: string | null;
+  factorEquivalencia: string | null;
 }
 
 export function toProductoPublico(producto: Producto): ProductoPublico {
@@ -23,6 +27,9 @@ export function toProductoPublico(producto: Producto): ProductoPublico {
     activo: producto.activo,
     imagenUrl: producto.imagenUrl,
     orden: producto.orden,
+    tipo: producto.tipo,
+    familiaElaboradoId: producto.familiaElaboradoId,
+    factorEquivalencia: producto.factorEquivalencia?.toString() ?? null,
   };
 }
 
@@ -36,6 +43,7 @@ export interface ProductoVentaPublico {
   activo: boolean;
   imagenUrl: string | null;
   orden: number;
+  tipo: TipoProducto;
 }
 
 export function toProductoVentaPublico(producto: Producto): ProductoVentaPublico {
@@ -47,5 +55,6 @@ export function toProductoVentaPublico(producto: Producto): ProductoVentaPublico
     activo: producto.activo,
     imagenUrl: producto.imagenUrl,
     orden: producto.orden,
+    tipo: producto.tipo,
   };
 }

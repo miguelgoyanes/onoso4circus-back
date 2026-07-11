@@ -20,6 +20,8 @@ export class InMemoryVentaBarRepository implements VentaBarRepository {
         if (filter?.paseId && v.paseId !== filter.paseId) return false;
         if (filter?.fechaId && v.fechaId !== filter.fechaId) return false;
         if (filter?.plazaId && v.plazaId !== filter.plazaId) return false;
+        if (filter?.desde && v.creadoEn.getTime() < filter.desde.getTime()) return false;
+        if (filter?.hasta && v.creadoEn.getTime() >= filter.hasta.getTime()) return false;
         return true;
       })
       .sort((a, b) => b.creadoEn.getTime() - a.creadoEn.getTime());

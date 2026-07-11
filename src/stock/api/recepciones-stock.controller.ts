@@ -23,7 +23,10 @@ export class RecepcionesStockController {
   @Get()
   public async listar(@Query() query: ListarPorProductoQueryDto): Promise<RecepcionStockPublico[]> {
     const recepciones = await this.recepcionStockService.listar(query.productoId);
-    return Promise.all(recepciones.map((r) => this.presentar(r)));
+    // Solo tiene sentido resolver "cuál es el lote activo" cuando se listan los lotes de UN
+    // insumo concreto (el uso habitual de esta pantalla) — evita N llamadas a loteActivo.
+    const loteActivo = query.productoId ? await this.recepcionStockService.loteActivo(query.productoId) : null;
+    return Promise.all(recepciones.map((r) => this.presentar(r, loteActivo?.id === r.id)));
   }
 
   @Post()
@@ -38,6 +41,8 @@ export class RecepcionesStockController {
       tipoFiscal: dto.tipoFiscal,
       ivaPercent: dto.ivaPercent,
       baseImponible: dto.baseImponible,
+      cantidadMedida: dto.cantidadMedida,
+      unidadMedida: dto.unidadMedida,
     });
     return this.presentar(recepcion);
   }
@@ -56,9 +61,14 @@ export class RecepcionesStockController {
       tipoFiscal: dto.tipoFiscal,
       ivaPercent: dto.ivaPercent,
       baseImponible: dto.baseImponible,
+      cantidadMedida: dto.cantidadMedida,
+      unidadMedida: dto.unidadMedida,
     });
     return this.presentar(recepcion);
   }
+
+  // "Iniciar uso" vive en /ventas-bar (VentasBarController) — cerrar el lote anterior
+  // requiere leer ventas, y stock no puede depender de ventas (dependencia inversa).
 
   @Delete(':id')
   public async eliminar(@Param('id') id: string): Promise<{ ok: true }> {
@@ -66,8 +76,8 @@ export class RecepcionesStockController {
     return { ok: true };
   }
 
-  private async presentar(recepcion: RecepcionStock): Promise<RecepcionStockPublico> {
+  private async presentar(recepcion: RecepcionStock, esLoteActivo?: boolean): Promise<RecepcionStockPublico> {
     const producto = await this.productoService.obtener(recepcion.productoId);
-    return toRecepcionStockPublico(recepcion, producto.nombre);
+    return toRecepcionStockPublico(recepcion, producto.nombre, esLoteActivo);
   }
 }

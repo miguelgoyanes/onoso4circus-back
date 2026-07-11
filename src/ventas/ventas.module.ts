@@ -20,6 +20,7 @@ import { VENTA_BAR_REPOSITORY } from './application/venta-bar.repository';
 import { TypeOrmVentaBarRepository } from './infrastructure/typeorm-venta-bar.repository';
 import { VentaBarOrmEntity } from './infrastructure/orm/venta-bar.orm-entity';
 import { VentasBarController } from './api/ventas-bar.controller';
+import { CosteElaboradoService } from './application/coste-elaborado.service';
 import { VentasSeedService } from './ventas-seed.service';
 import { AccountingModule } from '../accounting/accounting.module';
 import { PlazasModule } from '../plazas/plazas.module';
@@ -38,6 +39,7 @@ import { StockModule } from '../stock/stock.module';
     TipoEntradaService,
     VentaEntradasService,
     VentaBarService,
+    CosteElaboradoService,
     VentasSeedService,
     { provide: CONTRATO_INGRESO_REPOSITORY, useClass: TypeOrmContratoIngresoRepository },
     { provide: TIPO_ENTRADA_REPOSITORY, useClass: TypeOrmTipoEntradaRepository },

@@ -20,6 +20,11 @@ function toDomain(orm: RecepcionStockOrmEntity): RecepcionStock {
     tipoFiscal: orm.tipoFiscal ?? undefined,
     ivaPercent: orm.ivaPercent ?? undefined,
     importeIva: orm.importeIva ?? undefined,
+    cantidadMedida: orm.cantidadMedida ?? undefined,
+    unidadMedida: orm.unidadMedida ?? undefined,
+    fechaInicioUso: orm.fechaInicioUso,
+    cierreJournalEntryId: orm.cierreJournalEntryId,
+    cerrado: orm.cerrado,
   });
 }
 
@@ -45,6 +50,11 @@ export class TypeOrmRecepcionStockRepository implements RecepcionStockRepository
       ivaPercent: recepcion.ivaPercent ?? null,
       importeIva: recepcion.importeIva ?? null,
       journalEntryId: recepcion.journalEntryId,
+      cantidadMedida: recepcion.cantidadMedida ?? null,
+      unidadMedida: recepcion.unidadMedida ?? null,
+      fechaInicioUso: recepcion.fechaInicioUso ?? null,
+      cierreJournalEntryId: recepcion.cierreJournalEntryId ?? null,
+      cerrado: recepcion.cerrado ?? false,
     });
   }
 

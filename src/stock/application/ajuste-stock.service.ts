@@ -3,6 +3,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import Decimal from 'decimal.js';
 import { AjusteStock } from '../domain/ajuste-stock';
 import { TipoAjusteStock } from '../domain/tipo-ajuste-stock';
+import { TipoProducto } from '../domain/tipo-producto';
 import { conSegundosDelMomento } from './con-segundos-del-momento';
 import { AJUSTE_STOCK_REPOSITORY } from './ajuste-stock.repository';
 import type { AjusteStockRepository } from './ajuste-stock.repository';
@@ -101,6 +102,11 @@ export class AjusteStockService {
     params: DatosAjusteStock,
   ): Promise<{ journalEntryId: string; costeUnitarioAplicado: Decimal }> {
     const producto = await this.productoService.obtener(productoId);
+    if (producto.tipo !== TipoProducto.VENTA_DIRECTA) {
+      throw new BadRequestException(
+        'Los ajustes de stock solo aplican a productos de venta directa — un INSUMO se consume vía su ciclo de lotes, y un ELABORADO no tiene stock propio',
+      );
+    }
     const costeUnitarioAplicado = producto.costeUnitarioActual;
     if (costeUnitarioAplicado.isZero()) {
       throw new BadRequestException(

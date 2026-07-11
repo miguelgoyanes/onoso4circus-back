@@ -16,6 +16,9 @@ function toDomain(orm: ProductoOrmEntity): Producto {
     orm.activo,
     orm.imagenUrl,
     orm.orden,
+    orm.tipo,
+    orm.familiaElaboradoId,
+    orm.factorEquivalencia,
   );
 }
 
@@ -37,6 +40,9 @@ export class TypeOrmProductoRepository implements ProductoRepository {
       activo: producto.activo,
       imagenUrl: producto.imagenUrl,
       orden: producto.orden,
+      tipo: producto.tipo,
+      familiaElaboradoId: producto.familiaElaboradoId,
+      factorEquivalencia: producto.factorEquivalencia,
     });
   }
 

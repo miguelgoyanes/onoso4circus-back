@@ -1,6 +1,8 @@
 import Decimal from 'decimal.js';
 import { Column, Entity, PrimaryColumn } from 'typeorm';
 import { decimalTransformer } from '../../../accounting/infrastructure/orm/decimal.transformer';
+import { decimalNullableTransformer } from './decimal-nullable.transformer';
+import { TipoProducto } from '../../domain/tipo-producto';
 
 @Entity('productos')
 export class ProductoOrmEntity {
@@ -42,4 +44,20 @@ export class ProductoOrmEntity {
 
   @Column({ type: 'int', default: 0 })
   orden: number;
+
+  @Column({ type: 'enum', enum: TipoProducto, default: TipoProducto.VENTA_DIRECTA })
+  tipo: TipoProducto;
+
+  @Column({ type: 'varchar', name: 'familia_elaborado_id', nullable: true })
+  familiaElaboradoId: string | null;
+
+  @Column({
+    type: 'numeric',
+    precision: 10,
+    scale: 4,
+    name: 'factor_equivalencia',
+    nullable: true,
+    transformer: decimalNullableTransformer,
+  })
+  factorEquivalencia: Decimal | null;
 }
