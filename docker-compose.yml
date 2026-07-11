@@ -10,7 +10,9 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - '${DB_PORT}:5432'
+      # Solo localhost: en el VPS de producción evita exponer Postgres a
+      # internet aunque el firewall falle; en local no cambia nada.
+      - '127.0.0.1:${DB_PORT}:5432'
     volumes:
       - onoso4circus_postgres_data:/var/lib/postgresql/data
     healthcheck:
