@@ -18,6 +18,8 @@ import { FechaService } from '../plazas/application/fecha.service';
 import { PaseService } from '../plazas/application/pase.service';
 import { TipoActividad } from '../plazas/domain/tipo-actividad';
 import { ProductosController } from '../stock/api/productos.controller';
+import { VentaBarService } from './application/venta-bar.service';
+import { VentaEntradasService } from './application/venta-entradas.service';
 
 describe('Ventas — Contratos (integración contra Postgres real)', () => {
   let contratosController: ContratosIngresoController;
@@ -189,6 +191,51 @@ describe('Ventas — Taquilla (integración contra Postgres real)', () => {
     await expect(ventasEntradasController.obtener(venta.id)).rejects.toThrow();
     await tiposEntradaController.eliminar(tipoEntrada.id);
   });
+
+  it('reclasificarLote revierte TODO el lote si un id a mitad no existe (transacción real)', async () => {
+    const tipoEntrada = await tiposEntradaController.crear({
+      nombre: `General ${randomUUID()}`,
+      precio: 10,
+      aplicaIva: false,
+      modalidad: ModalidadTipoEntrada.PRESENCIAL,
+    });
+
+    const [ventaA] = await ventasEntradasController.crearLote({
+      paseId,
+      lineas: [{ tipoEntradaId: tipoEntrada.id, cantidad: 2, cuentaCobroId, origen: OrigenVenta.FISICA }],
+    });
+    const [ventaB] = await ventasEntradasController.crearLote({
+      paseId,
+      lineas: [{ tipoEntradaId: tipoEntrada.id, cantidad: 3, cuentaCobroId, origen: OrigenVenta.FISICA }],
+    });
+    expect(ventaA.tipoFiscal).toBeUndefined();
+    expect(ventaB.tipoFiscal).toBeUndefined();
+
+    const ventaEntradasService = moduleRef.get(VentaEntradasService);
+    const journalEntryIdAAntes = (await ventaEntradasService.obtener(ventaA.id)).journalEntryId;
+    const journalEntryIdBAntes = (await ventaEntradasService.obtener(ventaB.id)).journalEntryId;
+
+    // ventaA va ANTES del id inexistente en la lista — si no hubiera transacción real, ventaA
+    // ya habría quedado reclasificada a A cuando el bucle revienta en el id falso.
+    await expect(
+      ventasEntradasController.reclasificarLote({
+        ids: [ventaA.id, randomUUID(), ventaB.id],
+        tipoFiscal: TipoFiscal.A,
+        ivaPercent: 21,
+      }),
+    ).rejects.toThrow();
+
+    const ventaATrasFallo = await ventasEntradasController.obtener(ventaA.id);
+    const ventaBTrasFallo = await ventasEntradasController.obtener(ventaB.id);
+    expect(ventaATrasFallo.tipoFiscal).toBeUndefined();
+    expect(ventaBTrasFallo.tipoFiscal).toBeUndefined();
+    expect((await ventaEntradasService.obtener(ventaA.id)).journalEntryId).toBe(journalEntryIdAAntes);
+    expect((await ventaEntradasService.obtener(ventaB.id)).journalEntryId).toBe(journalEntryIdBAntes);
+
+    await ventasEntradasController.eliminar(ventaA.id);
+    await ventasEntradasController.eliminar(ventaB.id);
+    await tiposEntradaController.eliminar(tipoEntrada.id);
+  });
 });
 
 describe('Ventas — Bar (integración contra Postgres real)', () => {
@@ -279,5 +326,53 @@ describe('Ventas — Bar (integración contra Postgres real)', () => {
 
     await ventasBarController.eliminar(pedido.id);
     await expect(ventasBarController.obtener(pedido.id)).rejects.toThrow();
+  });
+
+  it('reclasificarLote revierte TODO el lote si un id a mitad no existe (transacción real)', async () => {
+    const producto = await productosController.crear({
+      nombre: `Agua ${randomUUID()}`,
+      precioVentaPublico: 1,
+      aplicaIva: false,
+    });
+
+    const pedidoA = await ventasBarController.crear({
+      paseId,
+      cuentaCobroId,
+      lineas: [{ productoId: producto.id, cantidad: 3 }],
+    });
+    const pedidoB = await ventasBarController.crear({
+      paseId,
+      cuentaCobroId,
+      lineas: [{ productoId: producto.id, cantidad: 4 }],
+    });
+    expect(pedidoA.tipoFiscal).toBeUndefined();
+    expect(pedidoB.tipoFiscal).toBeUndefined();
+
+    const ventaBarService = moduleRef.get(VentaBarService);
+    const journalEntryIdAAntes = (await ventaBarService.obtener(pedidoA.id)).journalEntryId;
+    const journalEntryIdBAntes = (await ventaBarService.obtener(pedidoB.id)).journalEntryId;
+
+    // pedidoA va ANTES del id inexistente en la lista — si no hubiera transacción real,
+    // pedidoA ya habría quedado reclasificado a A cuando el bucle revienta en el id falso.
+    await expect(
+      ventasBarController.reclasificarLote({
+        ids: [pedidoA.id, randomUUID(), pedidoB.id],
+        tipoFiscal: TipoFiscal.A,
+        ivaPercent: 21,
+      }),
+    ).rejects.toThrow();
+
+    const pedidoATrasFallo = await ventasBarController.obtener(pedidoA.id);
+    const pedidoBTrasFallo = await ventasBarController.obtener(pedidoB.id);
+    expect(pedidoATrasFallo.tipoFiscal).toBeUndefined();
+    expect(pedidoBTrasFallo.tipoFiscal).toBeUndefined();
+
+    // El journalEntryId no cambió — el asiento original sigue siendo el mismo, no se borró
+    // ni se sustituyó por uno nuevo a medio camino.
+    expect((await ventaBarService.obtener(pedidoA.id)).journalEntryId).toBe(journalEntryIdAAntes);
+    expect((await ventaBarService.obtener(pedidoB.id)).journalEntryId).toBe(journalEntryIdBAntes);
+
+    await ventasBarController.eliminar(pedidoA.id);
+    await ventasBarController.eliminar(pedidoB.id);
   });
 });

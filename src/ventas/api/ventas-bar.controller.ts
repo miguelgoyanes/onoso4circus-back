@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import Decimal from 'decimal.js';
 import { VentaBarService } from '../application/venta-bar.service';
 import { CosteElaboradoService } from '../application/coste-elaborado.service';
 import { Rol } from '../../auth/domain/usuario';
@@ -9,7 +10,11 @@ import { CrearVentaBarDto } from './dto/crear-venta-bar.dto';
 import { ActualizarVentaBarDto } from './dto/actualizar-venta-bar.dto';
 import { ReclasificarLoteVentasBarDto } from './dto/reclasificar-lote-ventas-bar.dto';
 import { ListarVentasBarQueryDto } from './dto/listar-ventas-bar-query.dto';
+import { RangoFechasRequeridoQueryDto } from './dto/rango-fechas-query.dto';
+import { BuscarCandidatosImporteDto } from './dto/buscar-candidatos-importe.dto';
 import { VentaBarPublica, toVentaBarPublica } from './venta-bar.presenter';
+import { ResumenPorTipoFiscalPublico, toResumenPorTipoFiscalPublico } from './resumen-tipo-fiscal.presenter';
+import { CandidatosParaImportePublico, toCandidatosParaImportePublico } from './candidatos-por-importe.presenter';
 import { IniciarUsoLoteDto } from '../../stock/api/dto/iniciar-uso-lote.dto';
 import { RecepcionStockPublico, toRecepcionStockPublico } from '../../stock/api/recepcion-stock.presenter';
 import { RecepcionStockService } from '../../stock/application/recepcion-stock.service';
@@ -43,6 +48,15 @@ export class VentasBarController {
   public async costeElaborado(@Param('productoId') productoId: string): Promise<{ costeUnitarioActual: string }> {
     const coste = await this.costeElaboradoService.costeAproximado(productoId);
     return { costeUnitarioActual: coste.toString() };
+  }
+
+  // Ruta específica antes de ':id' — igual que coste-elaborado. Para el módulo de
+  // reclasificación de IVA (por importe objetivo): cuánto hay en A y cuánto en B en el rango.
+  @Get('resumen-iva')
+  @Roles(Rol.ADMIN)
+  public async resumenIva(@Query() query: RangoFechasRequeridoQueryDto): Promise<ResumenPorTipoFiscalPublico> {
+    const resumen = await this.ventaBarService.resumenPorTipoFiscal(new Date(query.desde), new Date(query.hasta));
+    return toResumenPorTipoFiscalPublico(resumen);
   }
 
   // Única acción manual del ciclo de un insumo: cierra el lote anterior (si lo había, con su
@@ -82,6 +96,20 @@ export class VentasBarController {
   public async reclasificarLote(@Body() dto: ReclasificarLoteVentasBarDto): Promise<VentaBarPublica[]> {
     const ventas = await this.ventaBarService.reclasificarLote(dto.ids, dto.tipoFiscal, dto.ivaPercent);
     return ventas.map(toVentaBarPublica);
+  }
+
+  // Solo lectura — no reclasifica nada, solo propone qué ids reclasificar. El frontend
+  // confirma llamando a reclasificar-lote con esos ids exactos.
+  @Post('reclasificar-por-importe/preview')
+  @Roles(Rol.ADMIN)
+  public async buscarCandidatosParaImporte(@Body() dto: BuscarCandidatosImporteDto): Promise<CandidatosParaImportePublico> {
+    const candidatos = await this.ventaBarService.buscarCandidatosParaImporte(
+      new Date(dto.desde),
+      new Date(dto.hasta),
+      dto.origen,
+      new Decimal(dto.importeObjetivo),
+    );
+    return toCandidatosParaImportePublico(candidatos);
   }
 
   @Patch(':id')

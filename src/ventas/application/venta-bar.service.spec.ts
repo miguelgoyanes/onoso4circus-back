@@ -24,6 +24,7 @@ import { VinculacionInsumo } from '../../stock/domain/vinculacion-insumo';
 import { VinculacionInsumoRepository } from '../../stock/application/vinculacion-insumo.repository';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { InMemoryJournalEntryRepository } from '../../accounting/infrastructure/in-memory-journal-entry.repository';
+import { NoopUnitOfWork } from '../../accounting/infrastructure/noop-unit-of-work';
 import { InMemoryAccountRepository } from '../../accounting/infrastructure/in-memory-account.repository';
 import { AccountType } from '../../accounting/domain/account';
 import { TipoFiscal } from '../domain/tipo-fiscal';
@@ -217,6 +218,7 @@ describe('VentaBarService', () => {
       paseService,
       fechaService,
       accountingService,
+      new NoopUnitOfWork(),
     );
 
     await accountingService.crearCuenta({
@@ -352,6 +354,23 @@ describe('VentaBarService', () => {
     const cuentaCoste = await accountingService.obtenerCuentaPorCodigo('600001');
     // El coste (10×1=10) no cambia al reclasificar — solo se reparte el lado del ingreso.
     expect((await accountingService.saldoPorCuenta(cuentaCoste.id)).equals(new Decimal(10))).toBe(true);
+  });
+
+  it('resumenPorTipoFiscal cuenta "sin clasificar" como B y separa correctamente de A', async () => {
+    const desde = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const hasta = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await service.crear(paseId, cuentaCobroId, [{ productoId: cocaColaId, cantidad: 10 }]); // 20€, sin tipoFiscal
+    const pedidoB = await service.crear(paseId, cuentaCobroId, [{ productoId: aguaId, cantidad: 2 }], TipoFiscal.B); // 3€, B explícito
+    await service.reclasificarLote([pedidoB.id], TipoFiscal.A, 21); // 3€ pasa a A
+
+    const resumen = await service.resumenPorTipoFiscal(desde, hasta);
+
+    expect(resumen.countB).toBe(1);
+    expect(resumen.totalB.equals(new Decimal(20))).toBe(true);
+    expect(resumen.countA).toBe(1);
+    expect(resumen.totalA.equals(new Decimal(3))).toBe(true);
+    expect(resumen.baseA.plus(resumen.ivaA).equals(new Decimal(3))).toBe(true);
   });
 
   it('eliminar revierte el asiento y repone el stock de todas las líneas', async () => {

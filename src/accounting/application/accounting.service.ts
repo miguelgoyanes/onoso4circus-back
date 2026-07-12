@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
+import { EntityManager } from 'typeorm';
 import { Account, AccountType, TipoCuentaDinero } from '../domain/account';
 import { JournalEntry } from '../domain/journal-entry';
 import { JournalLine } from '../domain/journal-line';
@@ -23,13 +24,13 @@ export class AccountingService {
     private readonly accountRepository: AccountRepository,
   ) {}
 
-  public async post(entry: JournalEntry): Promise<void> {
+  public async post(entry: JournalEntry, manager?: EntityManager): Promise<void> {
     entry.validateBalance();
-    await this.repository.save(entry);
+    await this.repository.save(entry, manager);
   }
 
-  public async eliminarAsiento(id: string): Promise<void> {
-    await this.repository.delete(id);
+  public async eliminarAsiento(id: string, manager?: EntityManager): Promise<void> {
+    await this.repository.delete(id, manager);
   }
 
   public async entriesByDimension(

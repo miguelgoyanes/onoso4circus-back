@@ -11,6 +11,7 @@ import { FechaService } from '../../plazas/application/fecha.service';
 import { PaseService } from '../../plazas/application/pase.service';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { InMemoryJournalEntryRepository } from '../../accounting/infrastructure/in-memory-journal-entry.repository';
+import { NoopUnitOfWork } from '../../accounting/infrastructure/noop-unit-of-work';
 import { InMemoryAccountRepository } from '../../accounting/infrastructure/in-memory-account.repository';
 import { AccountType } from '../../accounting/domain/account';
 import { TipoFiscal } from '../domain/tipo-fiscal';
@@ -94,6 +95,7 @@ describe('VentaEntradasService', () => {
       paseService,
       fechaService,
       accountingService,
+      new NoopUnitOfWork(),
     );
 
     await accountingService.crearCuenta({
@@ -218,6 +220,28 @@ describe('VentaEntradasService', () => {
     expect(reclasificada.baseImponible!.plus(reclasificada.importeIva!).equals(new Decimal(150))).toBe(true);
     const cuentaCobro = cuentaCobroId;
     expect((await accountingService.saldoPorCuenta(cuentaCobro)).equals(new Decimal(150))).toBe(true);
+  });
+
+  it('resumenPorTipoFiscal cuenta "sin clasificar" como B y separa correctamente de A', async () => {
+    const desde = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const hasta = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const general = await tipoEntradaService.crear('General', new Decimal(10), false);
+
+    await service.crearLote(paseId, [
+      { tipoEntradaId: general.id, cantidad: 3, cuentaCobroId, origen: OrigenVenta.FISICA }, // 30€, sin tipoFiscal
+    ]);
+    const [ventaB] = await service.crearLote(paseId, [
+      { tipoEntradaId: general.id, cantidad: 1, cuentaCobroId, origen: OrigenVenta.FISICA, tipoFiscal: TipoFiscal.B },
+    ]); // 10€, B explícito
+    await service.reclasificarLote([ventaB.id], TipoFiscal.A, 21); // 10€ pasa a A
+
+    const resumen = await service.resumenPorTipoFiscal(desde, hasta);
+
+    expect(resumen.countB).toBe(1);
+    expect(resumen.totalB.equals(new Decimal(30))).toBe(true);
+    expect(resumen.countA).toBe(1);
+    expect(resumen.totalA.equals(new Decimal(10))).toBe(true);
+    expect(resumen.baseA.plus(resumen.ivaA).equals(new Decimal(10))).toBe(true);
   });
 
   it('eliminar revierte el asiento', async () => {

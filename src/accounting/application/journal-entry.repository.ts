@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { EntityManager } from 'typeorm';
 import { JournalEntry } from '../domain/journal-entry';
 import { JournalLine } from '../domain/journal-line';
 
@@ -31,7 +32,10 @@ export interface MovimientoCuenta {
 }
 
 export interface JournalEntryRepository {
-  save(entry: JournalEntry): Promise<void>;
+  // manager: si se pasa (Fase 0 — reclasificarLote transaccional), se usa esa conexión
+  // transaccional en vez de la conexión por defecto. Las implementaciones in-memory lo
+  // ignoran.
+  save(entry: JournalEntry, manager?: EntityManager): Promise<void>;
   findLinesByDimension(filter: EntriesByDimensionFilter): Promise<JournalLine[]>;
   findMovimientosByAccount(accountId: string): Promise<MovimientoCuenta[]>;
   findMovimientosByAccountEnRango(
@@ -40,7 +44,7 @@ export interface JournalEntryRepository {
     fechaHasta?: Date,
   ): Promise<MovimientoCuenta[]>;
   findEntriesByFilter(filter: EntriesByFilter): Promise<JournalEntry[]>;
-  delete(id: string): Promise<void>;
+  delete(id: string, manager?: EntityManager): Promise<void>;
 }
 
 export const JOURNAL_ENTRY_REPOSITORY = Symbol('JOURNAL_ENTRY_REPOSITORY');

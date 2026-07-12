@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import Decimal from 'decimal.js';
 import { Account } from '../domain/account';
 import { JournalEntry } from '../domain/journal-entry';
@@ -54,14 +54,17 @@ export class TypeOrmJournalEntryRepository implements JournalEntryRepository {
     private readonly accountRepo: Repository<AccountOrmEntity>,
   ) {}
 
-  public async save(entry: JournalEntry): Promise<void> {
+  public async save(entry: JournalEntry, manager?: EntityManager): Promise<void> {
+    const accountRepo = manager ? manager.getRepository(AccountOrmEntity) : this.accountRepo;
+    const journalEntryRepo = manager ? manager.getRepository(JournalEntryOrmEntity) : this.journalEntryRepo;
+
     const ormEntry = new JournalEntryOrmEntity();
     ormEntry.id = entry.id;
     ormEntry.date = entry.date;
     ormEntry.description = entry.description;
     ormEntry.lines = await Promise.all(
       entry.lines.map(async (line) => {
-        const account = await this.accountRepo.findOneByOrFail({ id: line.account.id });
+        const account = await accountRepo.findOneByOrFail({ id: line.account.id });
         const ormLine = new JournalLineOrmEntity();
         ormLine.id = randomUUID();
         ormLine.account = account;
@@ -77,7 +80,7 @@ export class TypeOrmJournalEntryRepository implements JournalEntryRepository {
       }),
     );
 
-    await this.journalEntryRepo.save(ormEntry);
+    await journalEntryRepo.save(ormEntry);
   }
 
   public async findLinesByDimension(
@@ -209,7 +212,8 @@ export class TypeOrmJournalEntryRepository implements JournalEntryRepository {
     return entries.map(toDomainEntry);
   }
 
-  public async delete(id: string): Promise<void> {
-    await this.journalEntryRepo.delete({ id });
+  public async delete(id: string, manager?: EntityManager): Promise<void> {
+    const journalEntryRepo = manager ? manager.getRepository(JournalEntryOrmEntity) : this.journalEntryRepo;
+    await journalEntryRepo.delete({ id });
   }
 }

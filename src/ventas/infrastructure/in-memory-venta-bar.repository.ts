@@ -40,4 +40,11 @@ export class InMemoryVentaBarRepository implements VentaBarRepository {
       (v) => v.creadoEn.getTime() >= desde.getTime() && v.creadoEn.getTime() < hasta.getTime(),
     ).length;
   }
+
+  // Aproximación por `creadoEn` — ver comentario de contarEnRango.
+  public async listarEnRangoReal(desde: Date, hasta: Date): Promise<VentaBar[]> {
+    return [...this.ventas.values()].filter(
+      (v) => v.creadoEn.getTime() >= desde.getTime() && v.creadoEn.getTime() < hasta.getTime(),
+    );
+  }
 }

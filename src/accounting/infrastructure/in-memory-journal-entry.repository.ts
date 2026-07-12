@@ -12,6 +12,7 @@ import {
 export class InMemoryJournalEntryRepository implements JournalEntryRepository {
   private entries: JournalEntry[] = [];
 
+  // manager: ignorado — no hay conexión real a la que atarse en memoria.
   public async save(entry: JournalEntry): Promise<void> {
     this.entries.push(entry);
   }

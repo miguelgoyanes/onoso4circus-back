@@ -39,4 +39,10 @@ export class InMemoryVentaEntradasRepository implements VentaEntradasRepository 
       (v) => v.creadoEn.getTime() >= desde.getTime() && v.creadoEn.getTime() < hasta.getTime(),
     ).length;
   }
+
+  public async listarEnRangoReal(desde: Date, hasta: Date): Promise<VentaEntradas[]> {
+    return [...this.ventas.values()].filter(
+      (v) => v.creadoEn.getTime() >= desde.getTime() && v.creadoEn.getTime() < hasta.getTime(),
+    );
+  }
 }

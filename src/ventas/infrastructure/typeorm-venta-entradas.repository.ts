@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { VentaEntradas } from '../domain/venta-entradas';
 import { VentaEntradasFilter, VentaEntradasRepository } from '../application/venta-entradas.repository';
 import { VentaEntradasOrmEntity } from './orm/venta-entradas.orm-entity';
@@ -34,8 +34,9 @@ export class TypeOrmVentaEntradasRepository implements VentaEntradasRepository {
     private readonly repo: Repository<VentaEntradasOrmEntity>,
   ) {}
 
-  public async save(venta: VentaEntradas): Promise<void> {
-    await this.repo.save({
+  public async save(venta: VentaEntradas, manager?: EntityManager): Promise<void> {
+    const repo = manager ? manager.getRepository(VentaEntradasOrmEntity) : this.repo;
+    await repo.save({
       id: venta.id,
       paseId: venta.paseId,
       fechaId: venta.fechaId,
@@ -89,5 +90,15 @@ export class TypeOrmVentaEntradasRepository implements VentaEntradasRepository {
       .where('f.fecha >= :desde', { desde })
       .andWhere('f.fecha < :hasta', { hasta })
       .getCount();
+  }
+
+  public async listarEnRangoReal(desde: Date, hasta: Date): Promise<VentaEntradas[]> {
+    const ventas = await this.repo
+      .createQueryBuilder('venta')
+      .innerJoin('fechas', 'f', 'f.id = venta.fecha_id')
+      .where('f.fecha >= :desde', { desde })
+      .andWhere('f.fecha < :hasta', { hasta })
+      .getMany();
+    return ventas.map(toDomain);
   }
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
+import { EntityManager } from 'typeorm';
 import { VentaEntradas } from '../domain/venta-entradas';
 import { OrigenVenta } from '../domain/origen-venta';
 import { TipoFiscal } from '../domain/tipo-fiscal';
@@ -12,6 +13,10 @@ import { FechaService } from '../../plazas/application/fecha.service';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { JournalEntry } from '../../accounting/domain/journal-entry';
 import { JournalLine, JournalLineDimensions } from '../../accounting/domain/journal-line';
+import { UNIT_OF_WORK } from '../../accounting/application/unit-of-work';
+import type { UnitOfWork } from '../../accounting/application/unit-of-work';
+import { ResumenPorTipoFiscal } from './resumen-tipo-fiscal';
+import { CandidatosParaImporte, buscarCandidatosParaImporte } from './candidatos-por-importe';
 
 const CUENTA_INGRESOS_TAQUILLA = '700001';
 const CUENTA_IVA_REPERCUTIDO = '477001';
@@ -49,6 +54,7 @@ export class VentaEntradasService {
     private readonly paseService: PaseService,
     private readonly fechaService: FechaService,
     private readonly accountingService: AccountingService,
+    @Inject(UNIT_OF_WORK) private readonly unitOfWork: UnitOfWork,
   ) {}
 
   public async crearLote(paseId: string, lineas: LineaVentaEntradas[]): Promise<VentaEntradas[]> {
@@ -101,7 +107,46 @@ export class VentaEntradasService {
 
   public async actualizar(id: string, cambios: LineaVentaEntradas): Promise<VentaEntradas> {
     const anterior = await this.buscarOFallar(id);
-    await this.accountingService.eliminarAsiento(anterior.journalEntryId);
+    return this.unitOfWork.run((manager) => this.aplicarActualizacion(anterior, cambios, manager));
+  }
+
+  // Reutiliza aplicarActualizacion() sobre cada id, preservando el importe total ya
+  // registrado — solo cambia cómo se reparte entre base imponible e IVA (o si se reparte).
+  // Todo el lote va en una única transacción: si falla a mitad, no queda ningún id
+  // reclasificado a medias — o se reclasifican todos, o ninguno.
+  public async reclasificarLote(ids: string[], tipoFiscal: TipoFiscal, ivaPercent?: number): Promise<VentaEntradas[]> {
+    return this.unitOfWork.run(async (manager) => {
+      const resultado: VentaEntradas[] = [];
+      for (const id of ids) {
+        const venta = await this.buscarOFallar(id);
+        const actualizada = await this.aplicarActualizacion(
+          venta,
+          {
+            tipoEntradaId: venta.tipoEntradaId,
+            cantidad: venta.cantidad,
+            cuentaCobroId: venta.cuentaCobroId,
+            origen: venta.origen,
+            numeroEntradaDesde: venta.numeroEntradaDesde,
+            numeroEntradaHasta: venta.numeroEntradaHasta,
+            tipoFiscal,
+            ivaPercent,
+          },
+          manager,
+        );
+        resultado.push(actualizada);
+      }
+      return resultado;
+    });
+  }
+
+  // Núcleo compartido por actualizar() (transacción propia) y reclasificarLote() (una sola
+  // transacción para todo el lote, con el manager ya abierto pasado desde fuera).
+  private async aplicarActualizacion(
+    anterior: VentaEntradas,
+    cambios: LineaVentaEntradas,
+    manager: EntityManager | undefined,
+  ): Promise<VentaEntradas> {
+    await this.accountingService.eliminarAsiento(anterior.journalEntryId, manager);
 
     const pase = await this.paseService.obtener(anterior.paseId);
     const fechaEntidad = await this.fechaService.obtener(pase.fechaId);
@@ -122,6 +167,7 @@ export class VentaEntradasService {
         description: `Venta de entradas (${tipoEntrada.nombre}) x${cambios.cantidad}`,
         lines: asiento.lines,
       }),
+      manager,
     );
 
     const actualizada = anterior.actualizada({
@@ -138,29 +184,8 @@ export class VentaEntradasService {
       importeIva: asiento.importeIva,
       journalEntryId,
     });
-    await this.repository.save(actualizada);
+    await this.repository.save(actualizada, manager);
     return actualizada;
-  }
-
-  // Reutiliza actualizar() sobre cada id, preservando el importe total ya registrado — solo
-  // cambia cómo se reparte entre base imponible e IVA (o si se reparte).
-  public async reclasificarLote(ids: string[], tipoFiscal: TipoFiscal, ivaPercent?: number): Promise<VentaEntradas[]> {
-    const resultado: VentaEntradas[] = [];
-    for (const id of ids) {
-      const venta = await this.buscarOFallar(id);
-      const actualizada = await this.actualizar(id, {
-        tipoEntradaId: venta.tipoEntradaId,
-        cantidad: venta.cantidad,
-        cuentaCobroId: venta.cuentaCobroId,
-        origen: venta.origen,
-        numeroEntradaDesde: venta.numeroEntradaDesde,
-        numeroEntradaHasta: venta.numeroEntradaHasta,
-        tipoFiscal,
-        ivaPercent,
-      });
-      resultado.push(actualizada);
-    }
-    return resultado;
   }
 
   public async eliminar(id: string): Promise<void> {
@@ -175,6 +200,46 @@ export class VentaEntradasService {
 
   public async contarEnRango(desde: Date, hasta: Date): Promise<number> {
     return this.repository.contarEnRango(desde, hasta);
+  }
+
+  // Para el módulo de reclasificación de IVA — ver comentario equivalente en
+  // VentaBarService.resumenPorTipoFiscal (mismo criterio: "sin clasificar" cuenta como B).
+  public async resumenPorTipoFiscal(desde: Date, hasta: Date): Promise<ResumenPorTipoFiscal> {
+    const ventas = await this.repository.listarEnRangoReal(desde, hasta);
+    let totalA = new Decimal(0);
+    let baseA = new Decimal(0);
+    let ivaA = new Decimal(0);
+    let countA = 0;
+    let totalB = new Decimal(0);
+    let countB = 0;
+
+    for (const venta of ventas) {
+      const total = venta.precioUnitarioAplicado.times(venta.cantidad);
+      if (venta.tipoFiscal === TipoFiscal.A) {
+        totalA = totalA.plus(total);
+        baseA = baseA.plus(venta.baseImponible ?? total);
+        ivaA = ivaA.plus(venta.importeIva ?? new Decimal(0));
+        countA += 1;
+      } else {
+        totalB = totalB.plus(total);
+        countB += 1;
+      }
+    }
+
+    return { totalA, baseA, ivaA, countA, totalB, countB };
+  }
+
+  // Solo lectura — no muta nada. Ver comentario equivalente en
+  // VentaBarService.buscarCandidatosParaImporte.
+  public async buscarCandidatosParaImporte(
+    desde: Date,
+    hasta: Date,
+    origen: TipoFiscal,
+    importeObjetivo: Decimal,
+  ): Promise<CandidatosParaImporte> {
+    const ventas = await this.repository.listarEnRangoReal(desde, hasta);
+    const pool = ventas.filter((v) => (origen === TipoFiscal.A ? v.tipoFiscal === TipoFiscal.A : v.tipoFiscal !== TipoFiscal.A));
+    return buscarCandidatosParaImporte(pool, (v) => v.precioUnitarioAplicado.times(v.cantidad), importeObjetivo);
   }
 
   public async obtener(id: string): Promise<VentaEntradas> {
