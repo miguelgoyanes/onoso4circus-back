@@ -7,6 +7,7 @@ import { RolesGuard } from '../../auth/api/roles.guard';
 import { Roles } from '../../auth/api/roles.decorator';
 import { CrearRecepcionStockDto } from './dto/crear-recepcion-stock.dto';
 import { ActualizarRecepcionStockDto } from './dto/actualizar-recepcion-stock.dto';
+import { PagarRecepcionStockDto } from './dto/pagar-recepcion-stock.dto';
 import { ListarPorProductoQueryDto } from './dto/listar-por-producto-query.dto';
 import { RecepcionStockPublico, toRecepcionStockPublico } from './recepcion-stock.presenter';
 import { RecepcionStock } from '../domain/recepcion-stock';
@@ -36,6 +37,7 @@ export class RecepcionesStockController {
       cantidad: dto.cantidad,
       costeUnitario: dto.costeUnitario,
       fecha: new Date(dto.fecha),
+      estadoPago: dto.estadoPago,
       cuentaOrigenId: dto.cuentaOrigenId,
       plazaId: dto.plazaId,
       tipoFiscal: dto.tipoFiscal,
@@ -44,6 +46,12 @@ export class RecepcionesStockController {
       cantidadMedida: dto.cantidadMedida,
       unidadMedida: dto.unidadMedida,
     });
+    return this.presentar(recepcion);
+  }
+
+  @Post(':id/pagar')
+  public async pagar(@Param('id') id: string, @Body() dto: PagarRecepcionStockDto): Promise<RecepcionStockPublico> {
+    const recepcion = await this.recepcionStockService.pagarPendiente(id, dto.cuentaOrigenId);
     return this.presentar(recepcion);
   }
 
@@ -56,6 +64,7 @@ export class RecepcionesStockController {
       cantidad: dto.cantidad,
       costeUnitario: dto.costeUnitario,
       fecha: new Date(dto.fecha),
+      estadoPago: dto.estadoPago,
       cuentaOrigenId: dto.cuentaOrigenId,
       plazaId: dto.plazaId,
       tipoFiscal: dto.tipoFiscal,

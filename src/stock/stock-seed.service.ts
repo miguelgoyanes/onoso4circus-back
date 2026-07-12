@@ -14,6 +14,9 @@ const CUENTAS: DefinicionCuenta[] = [
   // Compartida con Gastos (472001) — se siembra también aquí para que Stock no dependa
   // de que GastosModule se inicialice primero; es idempotente, no crea duplicados.
   { code: '472001', nombre: 'Hacienda Pública, IVA soportado', type: AccountType.ASSET },
+  // Proveedores de mercancía, separada de la 400001 de Gastos generales — así el saldo
+  // pendiente de pago a proveedores de stock se puede seguir por separado.
+  { code: '400002', nombre: 'Proveedores de stock', type: AccountType.LIABILITY },
 ];
 
 /** Siembra idempotente de las cuentas contables fijas que necesita Stock (sección 6 del

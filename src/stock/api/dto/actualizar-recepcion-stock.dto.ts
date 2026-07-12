@@ -1,6 +1,7 @@
 import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsUUID, ValidateIf } from 'class-validator';
 import { TipoFiscal } from '../../domain/tipo-fiscal';
 import { UnidadMedida } from '../../domain/unidad-medida';
+import { EstadoPagoRecepcion } from '../../domain/estado-pago-recepcion';
 
 export class ActualizarRecepcionStockDto {
   @IsInt()
@@ -10,8 +11,13 @@ export class ActualizarRecepcionStockDto {
   @IsDateString()
   fecha: string;
 
+  @IsOptional()
+  @IsEnum(EstadoPagoRecepcion)
+  estadoPago?: EstadoPagoRecepcion;
+
+  @ValidateIf((o: ActualizarRecepcionStockDto) => o.estadoPago !== EstadoPagoRecepcion.PENDIENTE_PAGO)
   @IsUUID()
-  cuentaOrigenId: string;
+  cuentaOrigenId?: string;
 
   @IsOptional()
   @IsUUID()

@@ -1,25 +1,29 @@
 import { randomUUID } from 'crypto';
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { RecepcionStock } from '../domain/recepcion-stock';
 import { TipoFiscal } from '../domain/tipo-fiscal';
 import { TipoProducto } from '../domain/tipo-producto';
 import { UnidadMedida } from '../domain/unidad-medida';
+import { EstadoPagoRecepcion } from '../domain/estado-pago-recepcion';
 import { conSegundosDelMomento } from './con-segundos-del-momento';
 import { RECEPCION_STOCK_REPOSITORY } from './recepcion-stock.repository';
 import type { RecepcionStockRepository } from './recepcion-stock.repository';
 import { ProductoService } from './producto.service';
 import { AccountingService } from '../../accounting/application/accounting.service';
-import { JournalEntry } from '../../accounting/domain/journal-entry';
+import { fechaContableDeHoy, JournalEntry } from '../../accounting/domain/journal-entry';
 import { JournalLine, JournalLineDimensions } from '../../accounting/domain/journal-line';
 
 const CUENTA_STOCK = '300001';
 const CUENTA_IVA_SOPORTADO = '472001';
+const CUENTA_PROVEEDORES_STOCK = '400002';
 
 export interface DatosRecepcionStock {
   cantidad: number;
   fecha: Date;
-  cuentaOrigenId: string;
+  // Solo obligatoria cuando estadoPago = PAGADO (o no indicado) — ver postearAsiento.
+  cuentaOrigenId?: string;
+  estadoPago?: EstadoPagoRecepcion;
   plazaId?: string;
   tipoFiscal?: TipoFiscal;
   // tipoFiscal = B (o no indicado): coste unitario tal cual, sin IVA.
@@ -51,6 +55,8 @@ interface AsientoRecepcion {
   tipoFiscal?: TipoFiscal;
   ivaPercent?: Decimal;
   importeIva?: Decimal;
+  estadoPago: EstadoPagoRecepcion;
+  cuentaOrigenId?: string;
   journalEntryId: string;
 }
 
@@ -73,7 +79,6 @@ export class RecepcionStockService {
       productoId: params.productoId,
       cantidad: params.cantidad,
       fecha: params.fecha,
-      cuentaOrigenId: params.cuentaOrigenId,
       plazaId: params.plazaId,
       cantidadMedida: params.cantidadMedida != null ? new Decimal(params.cantidadMedida) : undefined,
       unidadMedida: params.unidadMedida,
@@ -92,6 +97,12 @@ export class RecepcionStockService {
     this.validarTipoParaRecepcion(producto.tipo, params.cantidad);
 
     await this.accountingService.eliminarAsiento(anterior.journalEntryId);
+    // Si ya se había pagado una recepción que se creó pendiente, ese asiento de liquidación
+    // también se revierte — el repost de abajo colapsa todo al estado actual en un único
+    // asiento nuevo, igual que Gasto.actualizar().
+    if (anterior.pagoJournalEntryId) {
+      await this.accountingService.eliminarAsiento(anterior.pagoJournalEntryId);
+    }
     const asiento = await this.postearAsiento(anterior.productoId, producto.nombre, params);
 
     // fecha viene siempre de params — es editable a propósito, para poder reubicar un
@@ -101,7 +112,6 @@ export class RecepcionStockService {
       productoId: anterior.productoId,
       cantidad: params.cantidad,
       fecha: params.fecha,
-      cuentaOrigenId: params.cuentaOrigenId,
       plazaId: params.plazaId,
       cantidadMedida: params.cantidadMedida != null ? new Decimal(params.cantidadMedida) : undefined,
       unidadMedida: params.unidadMedida,
@@ -119,8 +129,43 @@ export class RecepcionStockService {
     const recepcion = await this.buscarOFallar(id);
     this.validarNoCerrado(recepcion);
     await this.accountingService.eliminarAsiento(recepcion.journalEntryId);
+    if (recepcion.pagoJournalEntryId) {
+      await this.accountingService.eliminarAsiento(recepcion.pagoJournalEntryId);
+    }
     await this.repository.delete(id);
     await this.productoService.recalcularDesdeHistorial(recepcion.productoId);
+  }
+
+  // Liquida una recepción creada/editada como PENDIENTE_PAGO: postea un asiento que salda
+  // "Proveedores de stock" (400002) contra la cuenta real de tesorería. Mismo patrón que
+  // GastoService.pagarPendiente.
+  public async pagarPendiente(id: string, cuentaOrigenId: string): Promise<RecepcionStock> {
+    const recepcion = await this.buscarOFallar(id);
+    if (recepcion.estadoPago !== EstadoPagoRecepcion.PENDIENTE_PAGO) {
+      throw new ConflictException('Esta recepción ya está pagada');
+    }
+    const producto = await this.productoService.obtener(recepcion.productoId);
+
+    const cuentaProveedores = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_PROVEEDORES_STOCK);
+    const cuentaOrigen = await this.accountingService.obtenerCuentaPorId(cuentaOrigenId);
+    const dimensiones: JournalLineDimensions = { plazaId: recepcion.plazaId, productoId: recepcion.productoId };
+
+    const journalEntryId = randomUUID();
+    await this.accountingService.post(
+      new JournalEntry({
+        id: journalEntryId,
+        date: fechaContableDeHoy(),
+        description: `Pago de recepción pendiente: ${producto.nombre}`,
+        lines: [
+          new JournalLine({ account: cuentaProveedores, debit: recepcion.importeTotal, dimensions: dimensiones }),
+          new JournalLine({ account: cuentaOrigen, credit: recepcion.importeTotal, dimensions: dimensiones }),
+        ],
+      }),
+    );
+
+    const pagada = recepcion.conPago(cuentaOrigenId, journalEntryId);
+    await this.repository.save(pagada);
+    return pagada;
   }
 
   // Un lote ya cerrado (ver CosteElaboradoService.cerrarLote) reconoció su coste en un
@@ -224,8 +269,18 @@ export class RecepcionStockService {
       importeTotal = baseImponible;
     }
 
+    const estadoPago = params.estadoPago ?? EstadoPagoRecepcion.PAGADO;
+    let cuentaCredito;
+    if (estadoPago === EstadoPagoRecepcion.PAGADO) {
+      if (!params.cuentaOrigenId) {
+        throw new BadRequestException('cuentaOrigenId es obligatorio cuando estadoPago = PAGADO');
+      }
+      cuentaCredito = await this.accountingService.obtenerCuentaPorId(params.cuentaOrigenId);
+    } else {
+      cuentaCredito = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_PROVEEDORES_STOCK);
+    }
+
     const cuentaStock = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_STOCK);
-    const cuentaOrigen = await this.accountingService.obtenerCuentaPorId(params.cuentaOrigenId);
     const dimensiones: JournalLineDimensions = { plazaId: params.plazaId, productoId };
 
     const lines: JournalLine[] = [
@@ -235,7 +290,7 @@ export class RecepcionStockService {
       const cuentaIva = await this.accountingService.obtenerCuentaPorCodigo(CUENTA_IVA_SOPORTADO);
       lines.push(new JournalLine({ account: cuentaIva, debit: importeIva!, dimensions: dimensiones }));
     }
-    lines.push(new JournalLine({ account: cuentaOrigen, credit: importeTotal, dimensions: dimensiones }));
+    lines.push(new JournalLine({ account: cuentaCredito, credit: importeTotal, dimensions: dimensiones }));
 
     const journalEntryId = randomUUID();
     await this.accountingService.post(
@@ -254,6 +309,8 @@ export class RecepcionStockService {
       tipoFiscal: tipoFiscal === TipoFiscal.A ? tipoFiscal : undefined,
       ivaPercent,
       importeIva,
+      estadoPago,
+      cuentaOrigenId: estadoPago === EstadoPagoRecepcion.PAGADO ? params.cuentaOrigenId : undefined,
       journalEntryId,
     };
   }

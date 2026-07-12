@@ -1,6 +1,7 @@
 import Decimal from 'decimal.js';
 import { TipoFiscal } from './tipo-fiscal';
 import { UnidadMedida } from './unidad-medida';
+import { EstadoPagoRecepcion } from './estado-pago-recepcion';
 
 export class RecepcionStock {
   public readonly id: string;
@@ -20,8 +21,15 @@ export class RecepcionStock {
   // real del historial de stock, para que Brandon pueda situar a mano una recepción
   // antigua exactamente entre las salidas que correspondan.
   public readonly fecha: Date;
-  public readonly cuentaOrigenId: string;
+  // Solo obligatoria cuando estadoPago = PAGADO — mientras está pendiente de pago no hay
+  // todavía una cuenta de tesorería real que crediticiar (se abona a "Proveedores de stock").
+  public readonly cuentaOrigenId?: string;
+  public readonly estadoPago: EstadoPagoRecepcion;
   public readonly journalEntryId: string;
+  // Id del asiento que liquida "Proveedores de stock" contra la cuenta real, si esta
+  // recepción se creó/editó como PENDIENTE_PAGO y luego se pagó (ver
+  // RecepcionStockService.pagarPendiente). Null mientras sigue pendiente o si nunca lo estuvo.
+  public readonly pagoJournalEntryId?: string | null;
   public readonly plazaId?: string;
   public readonly tipoFiscal?: TipoFiscal;
   public readonly ivaPercent?: Decimal;
@@ -54,8 +62,10 @@ export class RecepcionStock {
     baseImponible: Decimal;
     importeTotal: Decimal;
     fecha: Date;
-    cuentaOrigenId: string;
+    cuentaOrigenId?: string;
+    estadoPago?: EstadoPagoRecepcion;
     journalEntryId: string;
+    pagoJournalEntryId?: string | null;
     plazaId?: string;
     tipoFiscal?: TipoFiscal;
     ivaPercent?: Decimal;
@@ -74,7 +84,9 @@ export class RecepcionStock {
     this.importeTotal = params.importeTotal;
     this.fecha = params.fecha;
     this.cuentaOrigenId = params.cuentaOrigenId;
+    this.estadoPago = params.estadoPago ?? EstadoPagoRecepcion.PAGADO;
     this.journalEntryId = params.journalEntryId;
+    this.pagoJournalEntryId = params.pagoJournalEntryId;
     this.plazaId = params.plazaId;
     this.tipoFiscal = params.tipoFiscal;
     this.ivaPercent = params.ivaPercent;
@@ -88,6 +100,15 @@ export class RecepcionStock {
 
   public conFechaInicioUso(fechaInicioUso: Date): RecepcionStock {
     return new RecepcionStock({ ...this, fechaInicioUso });
+  }
+
+  public conPago(cuentaOrigenId: string, pagoJournalEntryId: string): RecepcionStock {
+    return new RecepcionStock({
+      ...this,
+      cuentaOrigenId,
+      estadoPago: EstadoPagoRecepcion.PAGADO,
+      pagoJournalEntryId,
+    });
   }
 
   // cierreJournalEntryId puede quedar null (lote cerrado sin nada que reconocer) — `cerrado`

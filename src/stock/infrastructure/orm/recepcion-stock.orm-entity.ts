@@ -3,6 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 import { ProductoOrmEntity } from './producto.orm-entity';
 import { TipoFiscal } from '../../domain/tipo-fiscal';
 import { UnidadMedida } from '../../domain/unidad-medida';
+import { EstadoPagoRecepcion } from '../../domain/estado-pago-recepcion';
 import { decimalTransformer } from '../../../accounting/infrastructure/orm/decimal.transformer';
 import { decimalNullableTransformer } from './decimal-nullable.transformer';
 
@@ -51,8 +52,11 @@ export class RecepcionStockOrmEntity {
   @Column({ type: 'timestamptz' })
   fecha: Date;
 
-  @Column({ type: 'varchar', name: 'cuenta_origen_id' })
-  cuentaOrigenId: string;
+  @Column({ type: 'varchar', name: 'cuenta_origen_id', nullable: true })
+  cuentaOrigenId: string | null;
+
+  @Column({ type: 'enum', enum: EstadoPagoRecepcion, name: 'estado_pago', default: EstadoPagoRecepcion.PAGADO })
+  estadoPago: EstadoPagoRecepcion;
 
   @Column({ type: 'varchar', name: 'plaza_id', nullable: true })
   plazaId: string | null;
@@ -82,6 +86,9 @@ export class RecepcionStockOrmEntity {
 
   @Column({ type: 'varchar', name: 'journal_entry_id' })
   journalEntryId: string;
+
+  @Column({ type: 'varchar', name: 'pago_journal_entry_id', nullable: true })
+  pagoJournalEntryId: string | null;
 
   @Column({
     type: 'numeric',

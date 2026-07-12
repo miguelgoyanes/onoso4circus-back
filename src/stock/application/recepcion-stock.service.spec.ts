@@ -12,6 +12,7 @@ import { AjusteStockRepository } from './ajuste-stock.repository';
 import { TipoFiscal } from '../domain/tipo-fiscal';
 import { TipoProducto } from '../domain/tipo-producto';
 import { UnidadMedida } from '../domain/unidad-medida';
+import { EstadoPagoRecepcion } from '../domain/estado-pago-recepcion';
 import { ProductoService } from './producto.service';
 import { RecepcionStockService } from './recepcion-stock.service';
 
@@ -96,6 +97,12 @@ describe('RecepcionStockService', () => {
       esCuentaDeDinero: true,
     });
     cuentaOrigenId = cuentaOrigen.id;
+    await accountingService.crearCuenta({
+      nombre: 'Proveedores de stock',
+      code: '400002',
+      type: AccountType.LIABILITY,
+      esCuentaDeDinero: false,
+    });
   });
 
   it('incrementa la cantidad y el coste del producto, y postea 300001 débito / cuenta origen crédito', async () => {
@@ -243,6 +250,120 @@ describe('RecepcionStockService', () => {
       expect((await accountingService.saldoPorCuenta(cuenta472001.id)).equals(new Decimal(21))).toBe(true);
       const cuentaStock = await accountingService.obtenerCuentaPorCodigo('300001');
       expect((await accountingService.saldoPorCuenta(cuentaStock.id)).equals(new Decimal(100))).toBe(true);
+    });
+  });
+
+  describe('estadoPago = PENDIENTE_PAGO y pagarPendiente', () => {
+    it('crea una recepción pendiente de pago sin cuentaOrigenId, acreditando 400002 en vez de la cuenta origen', async () => {
+      const producto = await productoService.crear('Coca-Cola', new Decimal(2), true);
+      const recepcion = await service.crear({
+        productoId: producto.id,
+        cantidad: 24,
+        costeUnitario: 0.5,
+        fecha: new Date('2026-07-10'),
+        estadoPago: EstadoPagoRecepcion.PENDIENTE_PAGO,
+      });
+
+      expect(recepcion.estadoPago).toBe(EstadoPagoRecepcion.PENDIENTE_PAGO);
+      expect(recepcion.cuentaOrigenId).toBeUndefined();
+
+      const cuentaStock = await accountingService.obtenerCuentaPorCodigo('300001');
+      expect((await accountingService.saldoPorCuenta(cuentaStock.id)).equals(new Decimal(12))).toBe(true);
+      const cuentaProveedores = await accountingService.obtenerCuentaPorCodigo('400002');
+      // 400002 es pasivo — un crédito lo aumenta (convención contraria a la de un activo como 570001).
+      expect((await accountingService.saldoPorCuenta(cuentaProveedores.id)).equals(new Decimal(12))).toBe(true);
+    });
+
+    it('rechaza estadoPago = PAGADO sin cuentaOrigenId', async () => {
+      const producto = await productoService.crear('Coca-Cola', new Decimal(2), true);
+      await expect(
+        service.crear({
+          productoId: producto.id,
+          cantidad: 24,
+          costeUnitario: 0.5,
+          fecha: new Date('2026-07-10'),
+          estadoPago: EstadoPagoRecepcion.PAGADO,
+        }),
+      ).rejects.toThrow(/cuentaOrigenId es obligatorio/i);
+    });
+
+    it('pagarPendiente liquida 400002 contra la cuenta real y marca la recepción como PAGADO', async () => {
+      const producto = await productoService.crear('Coca-Cola', new Decimal(2), true);
+      const recepcion = await service.crear({
+        productoId: producto.id,
+        cantidad: 24,
+        costeUnitario: 0.5,
+        fecha: new Date('2026-07-10'),
+        estadoPago: EstadoPagoRecepcion.PENDIENTE_PAGO,
+      });
+
+      const pagada = await service.pagarPendiente(recepcion.id, cuentaOrigenId);
+
+      expect(pagada.estadoPago).toBe(EstadoPagoRecepcion.PAGADO);
+      expect(pagada.cuentaOrigenId).toBe(cuentaOrigenId);
+
+      const cuentaProveedores = await accountingService.obtenerCuentaPorCodigo('400002');
+      expect((await accountingService.saldoPorCuenta(cuentaProveedores.id)).equals(new Decimal(0))).toBe(true);
+      const cuentaOrigen = await accountingService.obtenerCuentaPorId(cuentaOrigenId);
+      expect((await accountingService.saldoPorCuenta(cuentaOrigen.id)).equals(new Decimal(-12))).toBe(true);
+    });
+
+    it('rechaza pagarPendiente sobre una recepción que ya está pagada', async () => {
+      const producto = await productoService.crear('Coca-Cola', new Decimal(2), true);
+      const recepcion = await service.crear({
+        productoId: producto.id,
+        cantidad: 24,
+        costeUnitario: 0.5,
+        fecha: new Date('2026-07-10'),
+        cuentaOrigenId,
+      });
+      await expect(service.pagarPendiente(recepcion.id, cuentaOrigenId)).rejects.toThrow(/ya está pagada/i);
+    });
+
+    it('actualizar puede reclasificar de PENDIENTE_PAGO a PAGADO, revirtiendo el asiento anterior sin duplicar', async () => {
+      const producto = await productoService.crear('Coca-Cola', new Decimal(2), true);
+      const recepcion = await service.crear({
+        productoId: producto.id,
+        cantidad: 24,
+        costeUnitario: 0.5,
+        fecha: new Date('2026-07-10'),
+        estadoPago: EstadoPagoRecepcion.PENDIENTE_PAGO,
+      });
+
+      const corregida = await service.actualizar(recepcion.id, {
+        cantidad: 24,
+        costeUnitario: 0.5,
+        fecha: new Date('2026-07-10'),
+        estadoPago: EstadoPagoRecepcion.PAGADO,
+        cuentaOrigenId,
+      });
+
+      expect(corregida.estadoPago).toBe(EstadoPagoRecepcion.PAGADO);
+      const cuentaProveedores = await accountingService.obtenerCuentaPorCodigo('400002');
+      expect((await accountingService.saldoPorCuenta(cuentaProveedores.id)).equals(new Decimal(0))).toBe(true);
+      const cuentaOrigen = await accountingService.obtenerCuentaPorId(cuentaOrigenId);
+      expect((await accountingService.saldoPorCuenta(cuentaOrigen.id)).equals(new Decimal(-12))).toBe(true);
+    });
+
+    it('eliminar revierte también el asiento de pago si la recepción ya se había liquidado', async () => {
+      const producto = await productoService.crear('Coca-Cola', new Decimal(2), true);
+      const recepcion = await service.crear({
+        productoId: producto.id,
+        cantidad: 24,
+        costeUnitario: 0.5,
+        fecha: new Date('2026-07-10'),
+        estadoPago: EstadoPagoRecepcion.PENDIENTE_PAGO,
+      });
+      await service.pagarPendiente(recepcion.id, cuentaOrigenId);
+
+      await service.eliminar(recepcion.id);
+
+      const cuentaStock = await accountingService.obtenerCuentaPorCodigo('300001');
+      expect((await accountingService.saldoPorCuenta(cuentaStock.id)).equals(new Decimal(0))).toBe(true);
+      const cuentaProveedores = await accountingService.obtenerCuentaPorCodigo('400002');
+      expect((await accountingService.saldoPorCuenta(cuentaProveedores.id)).equals(new Decimal(0))).toBe(true);
+      const cuentaOrigen = await accountingService.obtenerCuentaPorId(cuentaOrigenId);
+      expect((await accountingService.saldoPorCuenta(cuentaOrigen.id)).equals(new Decimal(0))).toBe(true);
     });
   });
 

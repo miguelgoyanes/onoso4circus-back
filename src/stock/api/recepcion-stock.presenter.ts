@@ -1,6 +1,7 @@
 import { RecepcionStock } from '../domain/recepcion-stock';
 import { TipoFiscal } from '../domain/tipo-fiscal';
 import { UnidadMedida } from '../domain/unidad-medida';
+import { EstadoPagoRecepcion } from '../domain/estado-pago-recepcion';
 
 // Estado de un lote de INSUMO, derivado (nunca almacenado) comparando fechaInicioUso entre
 // los lotes de un mismo insumo — ver RecepcionesStockController.presentar.
@@ -15,7 +16,8 @@ export interface RecepcionStockPublico {
   baseImponible: string;
   importeTotal: string;
   fecha: string;
-  cuentaOrigenId: string;
+  cuentaOrigenId?: string;
+  estadoPago: EstadoPagoRecepcion;
   plazaId?: string;
   tipoFiscal?: TipoFiscal;
   ivaPercent?: string;
@@ -46,6 +48,7 @@ export function toRecepcionStockPublico(
     importeTotal: recepcion.importeTotal.toString(),
     fecha: recepcion.fecha.toISOString(),
     cuentaOrigenId: recepcion.cuentaOrigenId,
+    estadoPago: recepcion.estadoPago,
     plazaId: recepcion.plazaId,
     tipoFiscal: recepcion.tipoFiscal,
     ivaPercent: recepcion.ivaPercent?.toString(),
