@@ -201,6 +201,10 @@ export class VentaBarService {
     return this.repository.findAll(filter);
   }
 
+  public async contarEnRango(desde: Date, hasta: Date): Promise<number> {
+    return this.repository.contarEnRango(desde, hasta);
+  }
+
   public async obtener(id: string): Promise<VentaBar> {
     return this.buscarOFallar(id);
   }

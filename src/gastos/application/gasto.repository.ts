@@ -2,6 +2,8 @@ import { EstadoPagoGasto, Gasto } from '../domain/gasto';
 
 export interface GastoFilter {
   plazaId?: string;
+  fechaId?: string;
+  paseId?: string;
   categoriaId?: string;
   estadoPago?: EstadoPagoGasto;
 }

@@ -170,7 +170,7 @@ export class ProductoService {
       return producto;
     }
     const [recepciones, ajustes] = await Promise.all([
-      this.recepcionRepository.findAll(id),
+      this.recepcionRepository.findAll({ productoId: id }),
       this.ajusteRepository.findAll(id),
     ]);
 

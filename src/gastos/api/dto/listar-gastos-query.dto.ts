@@ -8,6 +8,14 @@ export class ListarGastosQueryDto {
 
   @IsOptional()
   @IsUUID()
+  fechaId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  paseId?: string;
+
+  @IsOptional()
+  @IsUUID()
   categoriaId?: string;
 
   @IsOptional()

@@ -8,7 +8,7 @@ import { UnidadMedida } from '../domain/unidad-medida';
 import { EstadoPagoRecepcion } from '../domain/estado-pago-recepcion';
 import { conSegundosDelMomento } from './con-segundos-del-momento';
 import { RECEPCION_STOCK_REPOSITORY } from './recepcion-stock.repository';
-import type { RecepcionStockRepository } from './recepcion-stock.repository';
+import type { RecepcionStockFilter, RecepcionStockRepository } from './recepcion-stock.repository';
 import { ProductoService } from './producto.service';
 import { AccountingService } from '../../accounting/application/accounting.service';
 import { fechaContableDeHoy, JournalEntry } from '../../accounting/domain/journal-entry';
@@ -181,8 +181,8 @@ export class RecepcionStockService {
     }
   }
 
-  public async listar(productoId?: string): Promise<RecepcionStock[]> {
-    return this.repository.findAll(productoId);
+  public async listar(filter?: RecepcionStockFilter): Promise<RecepcionStock[]> {
+    return this.repository.findAll(filter);
   }
 
   // Única acción manual del flujo de coste de un ELABORADO: marca cuándo se empieza a usar
@@ -216,7 +216,7 @@ export class RecepcionStockService {
   // aunque ya se cerró — sin este filtro, abrir un lote C lo cerraría una segunda vez,
   // duplicando su coste ya reconocido.
   public async loteActivo(insumoId: string): Promise<RecepcionStock | null> {
-    const lotes = (await this.repository.findAll(insumoId)).filter(
+    const lotes = (await this.repository.findAll({ productoId: insumoId })).filter(
       (l) => l.fechaInicioUso != null && !l.cerrado,
     );
     if (lotes.length === 0) {

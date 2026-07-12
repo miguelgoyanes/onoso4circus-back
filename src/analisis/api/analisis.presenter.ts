@@ -1,4 +1,7 @@
 import {
+  DetalleAgregado,
+  DetalleFecha,
+  DetallePase,
   DetallePlaza,
   PuntoFlujoCaja,
   ResumenActivos,
@@ -11,6 +14,7 @@ export interface ResumenPeriodoPublico {
   ingresos: string;
   gastos: string;
   beneficio: string;
+  costeProductoVendido: string;
   ventasTaquilla: string;
   ventasBar: string;
   ventasContratos: string;
@@ -32,17 +36,39 @@ export interface ResumenPlazaPublico {
   beneficio: string;
 }
 
-export interface DetallePlazaPublico {
-  plazaId: string;
-  plazaNombre: string;
+export interface DetalleAgregadoPublico {
   ingresosTaquilla: string;
   ingresosBar: string;
   ingresosContratos: string;
   ingresosTotal: string;
+  costeProductoVendidoBar: string;
   gastosPorCategoria: { categoriaNombre: string; importe: string }[];
   costePersonal: string;
   gastosTotal: string;
   beneficio: string;
+  beneficioBar: string;
+}
+
+export interface DetallePlazaPublico extends DetalleAgregadoPublico {
+  plazaId: string;
+  plazaNombre: string;
+}
+
+export interface DetalleFechaPublico extends DetalleAgregadoPublico {
+  fechaId: string;
+  plazaId: string;
+  plazaNombre: string;
+  fecha: string;
+}
+
+export interface DetallePasePublico extends DetalleAgregadoPublico {
+  paseId: string;
+  fechaId: string;
+  plazaId: string;
+  plazaNombre: string;
+  fecha: string;
+  paseHora: string;
+  paseNombre?: string;
 }
 
 export interface ResumenActivosPublico {
@@ -62,9 +88,25 @@ function presentarPeriodo(p: ResumenPeriodo): ResumenPeriodoPublico {
     ingresos: p.ingresos.toString(),
     gastos: p.gastos.toString(),
     beneficio: p.beneficio.toString(),
+    costeProductoVendido: p.costeProductoVendido.toString(),
     ventasTaquilla: p.ventasTaquilla.toString(),
     ventasBar: p.ventasBar.toString(),
     ventasContratos: p.ventasContratos.toString(),
+  };
+}
+
+function presentarDetalleAgregado(d: DetalleAgregado): DetalleAgregadoPublico {
+  return {
+    ingresosTaquilla: d.ingresosTaquilla.toString(),
+    ingresosBar: d.ingresosBar.toString(),
+    ingresosContratos: d.ingresosContratos.toString(),
+    ingresosTotal: d.ingresosTotal.toString(),
+    costeProductoVendidoBar: d.costeProductoVendidoBar.toString(),
+    gastosPorCategoria: d.gastosPorCategoria.map((g) => ({ categoriaNombre: g.categoriaNombre, importe: g.importe.toString() })),
+    costePersonal: d.costePersonal.toString(),
+    gastosTotal: d.gastosTotal.toString(),
+    beneficio: d.beneficio.toString(),
+    beneficioBar: d.beneficioBar.toString(),
   };
 }
 
@@ -89,17 +131,29 @@ export function toResumenPlazaPublico(r: ResumenPlaza): ResumenPlazaPublico {
 }
 
 export function toDetallePlazaPublico(d: DetallePlaza): DetallePlazaPublico {
+  return { plazaId: d.plazaId, plazaNombre: d.plazaNombre, ...presentarDetalleAgregado(d) };
+}
+
+export function toDetalleFechaPublico(d: DetalleFecha): DetalleFechaPublico {
   return {
+    fechaId: d.fechaId,
     plazaId: d.plazaId,
     plazaNombre: d.plazaNombre,
-    ingresosTaquilla: d.ingresosTaquilla.toString(),
-    ingresosBar: d.ingresosBar.toString(),
-    ingresosContratos: d.ingresosContratos.toString(),
-    ingresosTotal: d.ingresosTotal.toString(),
-    gastosPorCategoria: d.gastosPorCategoria.map((g) => ({ categoriaNombre: g.categoriaNombre, importe: g.importe.toString() })),
-    costePersonal: d.costePersonal.toString(),
-    gastosTotal: d.gastosTotal.toString(),
-    beneficio: d.beneficio.toString(),
+    fecha: d.fecha.toISOString().slice(0, 10),
+    ...presentarDetalleAgregado(d),
+  };
+}
+
+export function toDetallePasePublico(d: DetallePase): DetallePasePublico {
+  return {
+    paseId: d.paseId,
+    fechaId: d.fechaId,
+    plazaId: d.plazaId,
+    plazaNombre: d.plazaNombre,
+    fecha: d.fecha.toISOString().slice(0, 10),
+    paseHora: d.paseHora,
+    paseNombre: d.paseNombre,
+    ...presentarDetalleAgregado(d),
   };
 }
 

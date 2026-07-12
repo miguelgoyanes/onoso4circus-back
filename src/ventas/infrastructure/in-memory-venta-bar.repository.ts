@@ -30,4 +30,14 @@ export class InMemoryVentaBarRepository implements VentaBarRepository {
   public async delete(id: string): Promise<void> {
     this.ventas.delete(id);
   }
+
+  // Aproximación por `creadoEn` — este doble en memoria no modela la tabla `fechas`, así que
+  // no puede replicar el join por fecha real del evento que usa la implementación TypeORM.
+  // Sirve para los tests actuales (ninguno ejercita esta ventana con datos donde la fecha de
+  // alta difiera de la fecha del evento).
+  public async contarEnRango(desde: Date, hasta: Date): Promise<number> {
+    return [...this.ventas.values()].filter(
+      (v) => v.creadoEn.getTime() >= desde.getTime() && v.creadoEn.getTime() < hasta.getTime(),
+    ).length;
+  }
 }

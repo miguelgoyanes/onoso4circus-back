@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RecepcionStock } from '../domain/recepcion-stock';
-import { RecepcionStockRepository } from '../application/recepcion-stock.repository';
+import { RecepcionStockFilter, RecepcionStockRepository } from '../application/recepcion-stock.repository';
 import { RecepcionStockOrmEntity } from './orm/recepcion-stock.orm-entity';
 
 function toDomain(orm: RecepcionStockOrmEntity): RecepcionStock {
@@ -67,9 +67,12 @@ export class TypeOrmRecepcionStockRepository implements RecepcionStockRepository
     return orm ? toDomain(orm) : null;
   }
 
-  public async findAll(productoId?: string): Promise<RecepcionStock[]> {
+  public async findAll(filter?: RecepcionStockFilter): Promise<RecepcionStock[]> {
     const recepciones = await this.repo.find({
-      where: productoId ? { productoId } : {},
+      where: {
+        ...(filter?.productoId ? { productoId: filter.productoId } : {}),
+        ...(filter?.estadoPago ? { estadoPago: filter.estadoPago } : {}),
+      },
       order: { fecha: 'DESC' },
     });
     return recepciones.map(toDomain);

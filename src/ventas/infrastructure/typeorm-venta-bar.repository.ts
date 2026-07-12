@@ -75,4 +75,13 @@ export class TypeOrmVentaBarRepository implements VentaBarRepository {
   public async delete(id: string): Promise<void> {
     await this.repo.delete({ id });
   }
+
+  public async contarEnRango(desde: Date, hasta: Date): Promise<number> {
+    return this.repo
+      .createQueryBuilder('venta')
+      .innerJoin('fechas', 'f', 'f.id = venta.fecha_id')
+      .where('f.fecha >= :desde', { desde })
+      .andWhere('f.fecha < :hasta', { hasta })
+      .getCount();
+  }
 }

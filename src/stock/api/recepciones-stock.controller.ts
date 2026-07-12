@@ -23,7 +23,7 @@ export class RecepcionesStockController {
 
   @Get()
   public async listar(@Query() query: ListarPorProductoQueryDto): Promise<RecepcionStockPublico[]> {
-    const recepciones = await this.recepcionStockService.listar(query.productoId);
+    const recepciones = await this.recepcionStockService.listar({ productoId: query.productoId });
     // Solo tiene sentido resolver "cuál es el lote activo" cuando se listan los lotes de UN
     // insumo concreto (el uso habitual de esta pantalla) — evita N llamadas a loteActivo.
     const loteActivo = query.productoId ? await this.recepcionStockService.loteActivo(query.productoId) : null;

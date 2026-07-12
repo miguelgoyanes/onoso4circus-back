@@ -38,4 +38,8 @@ export class TypeOrmPaseRepository implements PaseRepository {
   public async delete(id: string): Promise<void> {
     await this.repo.delete({ id });
   }
+
+  public async contarTodos(): Promise<number> {
+    return this.repo.count();
+  }
 }

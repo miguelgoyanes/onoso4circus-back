@@ -32,4 +32,11 @@ export class InMemoryVentaEntradasRepository implements VentaEntradasRepository 
   public async delete(id: string): Promise<void> {
     this.ventas.delete(id);
   }
+
+  // Aproximación por `creadoEn` — ver comentario equivalente en InMemoryVentaBarRepository.
+  public async contarEnRango(desde: Date, hasta: Date): Promise<number> {
+    return [...this.ventas.values()].filter(
+      (v) => v.creadoEn.getTime() >= desde.getTime() && v.creadoEn.getTime() < hasta.getTime(),
+    ).length;
+  }
 }

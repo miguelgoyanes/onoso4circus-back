@@ -17,6 +17,9 @@ export interface VentaBarRepository {
   findById(id: string): Promise<VentaBar | null>;
   findAll(filter?: VentaBarFilter): Promise<VentaBar[]>;
   delete(id: string): Promise<void>;
+  // Cuenta ventas por la fecha REAL del evento (Fecha.fecha, vía join), no por `creadoEn`
+  // (fecha de alta) — para KPIs anuales como el ticket medio. `hasta` exclusive.
+  contarEnRango(desde: Date, hasta: Date): Promise<number>;
 }
 
 export const VENTA_BAR_REPOSITORY = Symbol('VENTA_BAR_REPOSITORY');

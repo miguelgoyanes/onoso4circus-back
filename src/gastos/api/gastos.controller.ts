@@ -25,6 +25,8 @@ export class GastosController {
   public async listar(@Query() query: ListarGastosQueryDto): Promise<GastoPublico[]> {
     const gastos = await this.gastoService.listar({
       plazaId: query.plazaId,
+      fechaId: query.fechaId,
+      paseId: query.paseId,
       categoriaId: query.categoriaId,
       estadoPago: query.estadoPago,
     });

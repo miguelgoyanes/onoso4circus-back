@@ -5,6 +5,7 @@ export interface PaseRepository {
   findById(id: string): Promise<Pase | null>;
   findByFecha(fechaId: string): Promise<Pase[]>;
   delete(id: string): Promise<void>;
+  contarTodos(): Promise<number>;
 }
 
 export const PASE_REPOSITORY = Symbol('PASE_REPOSITORY');

@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { Producto } from '../../stock/domain/producto';
 import { ProductoRepository } from '../../stock/application/producto.repository';
 import { RecepcionStock } from '../../stock/domain/recepcion-stock';
-import { RecepcionStockRepository } from '../../stock/application/recepcion-stock.repository';
+import { RecepcionStockFilter, RecepcionStockRepository } from '../../stock/application/recepcion-stock.repository';
 import { AjusteStock } from '../../stock/domain/ajuste-stock';
 import { AjusteStockRepository } from '../../stock/application/ajuste-stock.repository';
 import { FamiliaElaborado } from '../../stock/domain/familia-elaborado';
@@ -47,9 +47,11 @@ class InMemoryRecepcionStockRepository implements RecepcionStockRepository {
   async findById(id: string): Promise<RecepcionStock | null> {
     return this.recepciones.get(id) ?? null;
   }
-  async findAll(productoId?: string): Promise<RecepcionStock[]> {
-    const todas = [...this.recepciones.values()];
-    return productoId ? todas.filter((r) => r.productoId === productoId) : todas;
+  async findAll(filter?: RecepcionStockFilter): Promise<RecepcionStock[]> {
+    let todas = [...this.recepciones.values()];
+    if (filter?.productoId) todas = todas.filter((r) => r.productoId === filter.productoId);
+    if (filter?.estadoPago) todas = todas.filter((r) => r.estadoPago === filter.estadoPago);
+    return todas;
   }
   async existeConProducto(productoId: string): Promise<boolean> {
     return [...this.recepciones.values()].some((r) => r.productoId === productoId);

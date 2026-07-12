@@ -173,6 +173,10 @@ export class VentaEntradasService {
     return this.repository.findAll(filter);
   }
 
+  public async contarEnRango(desde: Date, hasta: Date): Promise<number> {
+    return this.repository.contarEnRango(desde, hasta);
+  }
+
   public async obtener(id: string): Promise<VentaEntradas> {
     return this.buscarOFallar(id);
   }

@@ -32,6 +32,10 @@ export class PaseService {
     return this.buscarOFallar(id);
   }
 
+  public async contarTodos(): Promise<number> {
+    return this.repository.contarTodos();
+  }
+
   public async actualizar(id: string, hora: string, nombre?: string): Promise<Pase> {
     const actual = await this.buscarOFallar(id);
     const actualizado = actual.conDatos(hora, nombre);

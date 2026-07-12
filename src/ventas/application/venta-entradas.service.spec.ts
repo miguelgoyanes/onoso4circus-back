@@ -66,6 +66,9 @@ class InMemoryPaseRepository implements PaseRepository {
   async delete(id: string): Promise<void> {
     this.pases.delete(id);
   }
+  async contarTodos(): Promise<number> {
+    return this.pases.size;
+  }
 }
 
 describe('VentaEntradasService', () => {

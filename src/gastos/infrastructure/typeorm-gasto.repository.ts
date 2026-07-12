@@ -65,6 +65,8 @@ export class TypeOrmGastoRepository implements GastoRepository {
     const gastos = await this.repo.find({
       where: {
         ...(filter?.plazaId ? { plazaId: filter.plazaId } : {}),
+        ...(filter?.fechaId ? { fechaId: filter.fechaId } : {}),
+        ...(filter?.paseId ? { paseId: filter.paseId } : {}),
         ...(filter?.categoriaId ? { categoriaId: filter.categoriaId } : {}),
         ...(filter?.estadoPago ? { estadoPago: filter.estadoPago } : {}),
       },
