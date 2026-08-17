@@ -1,0 +1,20 @@
+# Producción (VPS). Para desarrollo local sigue usando docker-compose.yml (Postgres local).
+# La base de datos aquí es la instancia COMPARTIDA de shared-infra-MGVPS/postgresql
+# (contenedor "mgvps-postgres" en la red mgvps-network), no una propia.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: onoso4circus-backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - mgvps-network
+
+networks:
+  mgvps-network:
+    external: true

@@ -1,0 +1,11 @@
+node_modules
+dist
+test
+.env
+.env.example
+.env.production
+backups
+uploads
+.git
+.vscode
+*.md
