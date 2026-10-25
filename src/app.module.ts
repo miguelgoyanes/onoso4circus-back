@@ -15,6 +15,7 @@ import { ActivosModule } from './activos/activos.module';
 import { AnalisisModule } from './analisis/analisis.module';
 import { ContabilidadModule } from './contabilidad/contabilidad.module';
 import { PlazasWebModule } from './plazas-web/plazas-web.module';
+import { BodaModule } from './boda/boda.module';
 
 @Module({
   imports: [
@@ -30,7 +31,9 @@ import { PlazasWebModule } from './plazas-web/plazas-web.module';
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true, // solo para desarrollo; se sustituye por migraciones antes de producción
+        // Crea y ajusta las tablas solas: cómodo en desarrollo, arriesgado con datos reales. En producción, una vez
+        // creadas las tablas, poner DB_SYNC=false en el .env del servidor.
+        synchronize: config.get<string>('DB_SYNC') !== 'false',
       }),
     }),
     AccountingModule,
@@ -45,6 +48,7 @@ import { PlazasWebModule } from './plazas-web/plazas-web.module';
     AnalisisModule,
     ContabilidadModule,
     PlazasWebModule,
+    BodaModule,
   ],
   controllers: [AppController],
   providers: [AppService],
