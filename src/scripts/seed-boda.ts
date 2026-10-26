@@ -79,8 +79,10 @@ const PREGUNTAS: PreguntaInicial[] = [
   },
   {
     clave: 'mesa_circo',
-    texto: 'Eres artista de circo y te sientan en la mesa de los magos. ¿Qué haces?',
-    textoPlural: 'Sois artistas de circo y os sientan en la mesa de los magos. ¿Qué hacéis?',
+    texto:
+      'Eres artista de circo y te sientan en la mesa de los magos. ¿Qué haces?',
+    textoPlural:
+      'Sois artistas de circo y os sientan en la mesa de los magos. ¿Qué hacéis?',
     ambito: 'invitacion',
     tipo: TipoPregunta.OPCION,
     opciones: [
@@ -94,8 +96,10 @@ const PREGUNTAS: PreguntaInicial[] = [
   },
   {
     clave: 'mesa_magos',
-    texto: 'Eres mago y te sientan en la mesa de los artistas de circo. ¿Qué haces?',
-    textoPlural: 'Sois magos y os sientan en la mesa de los artistas de circo. ¿Qué hacéis?',
+    texto:
+      'Eres mago y te sientan en la mesa de los artistas de circo. ¿Qué haces?',
+    textoPlural:
+      'Sois magos y os sientan en la mesa de los artistas de circo. ¿Qué hacéis?',
     ambito: 'invitacion',
     tipo: TipoPregunta.OPCION,
     opciones: [
@@ -109,8 +113,10 @@ const PREGUNTAS: PreguntaInicial[] = [
   },
   {
     clave: 'mesa_familia',
-    texto: 'Eres familiar de los novios y te sientan en la mesa de los artistas de circo y los magos. ¿Qué haces?',
-    textoPlural: 'Sois familia de los novios y os sientan en la mesa de los artistas de circo y los magos. ¿Qué hacéis?',
+    texto:
+      'Eres familiar de los novios y te sientan en la mesa de los artistas de circo y los magos. ¿Qué haces?',
+    textoPlural:
+      'Sois familia de los novios y os sientan en la mesa de los artistas de circo y los magos. ¿Qué hacéis?',
     ambito: 'invitacion',
     tipo: TipoPregunta.OPCION,
     opciones: [
@@ -120,12 +126,19 @@ const PREGUNTAS: PreguntaInicial[] = [
       'Le enseño al mago las fotos de mis vacaciones. Él me enseña un truco. Los dos fingimos estar impresionados.',
     ],
     obligatoria: true,
-    grupos: ['familia-de-fatima', 'familia-de-brandan', 'segunda-familia-de-brandan', 'familia-de-ponferrada'],
+    grupos: [
+      'familia-de-fatima',
+      'familia-de-brandan',
+      'segunda-familia-de-brandan',
+      'familia-de-ponferrada',
+    ],
   },
   {
     clave: 'mesa_amigos',
-    texto: 'Eres amigo de los novios y te sientan en la mesa de los artistas de circo y los magos. ¿Qué haces?',
-    textoPlural: 'Sois amigos de los novios y os sientan en la mesa de los artistas de circo y los magos. ¿Qué hacéis?',
+    texto:
+      'Eres amigo de los novios y te sientan en la mesa de los artistas de circo y los magos. ¿Qué haces?',
+    textoPlural:
+      'Sois amigos de los novios y os sientan en la mesa de los artistas de circo y los magos. ¿Qué hacéis?',
     ambito: 'invitacion',
     tipo: TipoPregunta.OPCION,
     opciones: [
@@ -139,8 +152,10 @@ const PREGUNTAS: PreguntaInicial[] = [
   },
   {
     clave: 'escenario',
-    texto: '🎪 Si los novios te invitan a subir al escenario para participar en un espectáculo durante la boda, ¿qué haces?',
-    textoPlural: '🎪 Si los novios os invitan a subir al escenario para participar en un espectáculo durante la boda, ¿qué hacéis?',
+    texto:
+      '🎪 Si los novios te invitan a subir al escenario para participar en un espectáculo durante la boda, ¿qué haces?',
+    textoPlural:
+      '🎪 Si los novios os invitan a subir al escenario para participar en un espectáculo durante la boda, ¿qué hacéis?',
     ambito: 'invitacion',
     tipo: TipoPregunta.OPCION,
     opciones: [
@@ -154,8 +169,7 @@ const PREGUNTAS: PreguntaInicial[] = [
   {
     clave: 'asistencia',
     texto: 'Ahora en serio: ¿podrás asistir a este día inolvidable?',
-    textoPlural:
-      'Ahora en serio: ¿podréis asistir a este día inolvidable?',
+    textoPlural: 'Ahora en serio: ¿podréis asistir a este día inolvidable?',
     ambito: 'persona',
     tipo: TipoPregunta.SI_NO,
     obligatoria: true,
@@ -211,7 +225,8 @@ async function main(): Promise<void> {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     entities: ENTIDADES_BODA,
-    synchronize: true,
+    // Igual que la aplicación: con DB_SYNC=false (producción, tablas ya creadas) no se toca el esquema.
+    synchronize: process.env.DB_SYNC !== 'false',
   });
   await dataSource.initialize();
 

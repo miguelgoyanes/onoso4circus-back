@@ -19,6 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "seed:boda": "ts-node -r tsconfig-paths/register src/scripts/seed-boda.ts",
+    "seed:boda:prod": "node dist/scripts/seed-boda.js",
     "seed:owner": "ts-node -r tsconfig-paths/register src/scripts/seed-owner.ts",
     "reset:owner-password": "ts-node -r tsconfig-paths/register src/scripts/reset-owner-password.ts"
   },
