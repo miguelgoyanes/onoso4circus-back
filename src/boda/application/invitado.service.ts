@@ -35,7 +35,7 @@ import {
 export interface DatosInvitado {
   grupoId: string;
   nombre: string;
-  apellidos: string;
+  apellidos?: string;
   telefono?: string | null;
   notasInternas?: string | null;
   // Cómo se nombra la invitación entera ("la familia Goyanes"); null = los nombres de las personas.
@@ -266,7 +266,8 @@ export class InvitadoService {
         { nombre: datos.nombre.trim() },
       );
     }
-    if (datos.apellidos !== undefined) invitado.apellidos = datos.apellidos;
+    if (datos.apellidos !== undefined)
+      invitado.apellidos = datos.apellidos.trim();
     if (datos.telefono !== undefined) invitado.telefono = datos.telefono;
     if (datos.notasInternas !== undefined)
       invitado.notasInternas = datos.notasInternas;
@@ -400,7 +401,7 @@ export class InvitadoService {
       id: randomUUID(),
       grupoId: datos.grupoId,
       nombre: datos.nombre.trim(),
-      apellidos: datos.apellidos.trim(),
+      apellidos: (datos.apellidos ?? '').trim(),
       telefono: datos.telefono?.trim() || null,
       token: generarToken(),
       notasInternas: datos.notasInternas ?? null,

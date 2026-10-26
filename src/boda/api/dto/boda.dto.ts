@@ -26,9 +26,10 @@ export class CrearInvitadoDto {
   @MinLength(1)
   nombre: string;
 
+  // Opcional: muchos invitados de la lista van solo con el nombre.
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  apellidos: string;
+  apellidos?: string;
 
   @IsOptional()
   @IsString()
@@ -88,7 +89,6 @@ export class ActualizarInvitadoDto {
 
   @IsOptional()
   @IsString()
-  @MinLength(1)
   apellidos?: string;
 
   @IsOptional()
